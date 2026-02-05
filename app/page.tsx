@@ -333,7 +333,7 @@ export default function Home() {
   const brand = {
     name: "WK Insight",
     subtitle: locale === "zh" ? "精密量測智慧助理" : "Precision Measurement Intelligence",
-    logoSrc: "/wk-logo.png"
+    logoSrc: `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/wk-logo.png`
   };
 
   useEffect(() => {
