@@ -96,9 +96,6 @@ export function Composer({
             {MODE_LABELS[mode][locale]}
           </span>
         </div>
-        <span className="hidden rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 sm:inline-flex">
-          {locale === "zh" ? "從左側切換功能" : "Switch from sidebar"}
-        </span>
       </div>
 
       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
