@@ -1,7 +1,7 @@
 "use client";
 
 import { cx } from "@/lib/utils";
-import type { ToolOption } from "@/components/Sidebar";
+import type { ToolOption } from "@/lib/types";
 
 type NewChatModalProps = {
   open: boolean;
