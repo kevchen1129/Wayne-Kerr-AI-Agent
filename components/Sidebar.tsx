@@ -202,15 +202,18 @@ export function Sidebar({
                   setRenameValue("");
                 }}
                 className={cx(
-                  "rounded-full border border-transparent p-2 text-slate-400 transition hover:border-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:hover:border-slate-700 dark:hover:text-slate-200",
-                  thread.id === activeThreadId && "text-white/80 hover:text-white dark:text-slate-600"
+                  "flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold leading-none text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:hover:bg-slate-800 dark:hover:text-slate-200",
+                  thread.id === activeThreadId &&
+                    "opacity-100 text-white/90 hover:bg-white/15 hover:text-white dark:text-slate-600"
                 )}
                 aria-label="More options"
                 aria-expanded={openMenuId === thread.id}
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 12h.01M12 12h.01M19 12h.01" />
-                </svg>
+                <span className="flex items-center gap-1" aria-hidden="true">
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                </span>
               </button>
               {openMenuId === thread.id && (
                 <div

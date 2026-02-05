@@ -1,19 +1,19 @@
-name: Deploy to GitHub Pages
+name: Deploy Preview
 
 on:
   push:
-    branches: ["main"]
+    branches-ignore: ["main", "gh-pages"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "pages-preview-${{ github.ref_name }}"
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  preview:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,14 +29,17 @@ jobs:
         run: npm ci
 
       - name: Build (static export)
-        env:
-          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
-        run: npm run build
+        run: |
+          SAFE_BRANCH=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
+          echo "SAFE_BRANCH=${SAFE_BRANCH}" >> $GITHUB_ENV
+          export NEXT_PUBLIC_BASE_PATH=/${{ github.event.repository.name }}/preview/${SAFE_BRANCH}
+          npm run build
 
-      - name: Deploy to gh-pages
+      - name: Deploy preview to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: ./out
+          destination_dir: preview/${{ env.SAFE_BRANCH }}
           keep_files: true

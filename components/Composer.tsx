@@ -81,22 +81,27 @@ export function Composer({
   const canSend = draft.text.trim().length > 0 || draft.images.length > 0;
 
   return (
-    <div className="border-t border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-            {locale === "zh" ? "目前功能" : "Active workflow"}
-          </div>
-          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+    <div className="border-t border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={cx(
+              "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white",
+              MODE_BADGE_COLOR[mode]
+            )}
+          >
+            {MODE_BADGE[mode]}
+          </span>
+          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             {MODE_LABELS[mode][locale]}
-          </div>
+          </span>
         </div>
-        <span className="rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-          {locale === "zh" ? "請從左側切換" : "Switch from left panel"}
+        <span className="hidden rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 sm:inline-flex">
+          {locale === "zh" ? "從左側切換功能" : "Switch from sidebar"}
         </span>
       </div>
 
-      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
         {MODE_HINTS[mode][locale]}
       </p>
 
@@ -152,7 +157,7 @@ export function Composer({
           </svg>
         </button>
 
-        <div className="flex-1 rounded-3xl border border-slate-200/80 bg-white/80 px-4 py-3 shadow-sm transition focus-within:border-slate-300 focus-within:ring-2 focus-within:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex-1 rounded-3xl border border-slate-300/80 bg-slate-50 px-4 py-3 shadow-sm transition focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -180,7 +185,7 @@ export function Composer({
           disabled={!canSend || isBusy}
           onClick={onSend}
           className={cx(
-            "flex h-12 shrink-0 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))]",
+            "flex h-12 shrink-0 items-center justify-center rounded-2xl px-4 text-sm font-semibold shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))]",
             canSend && !isBusy
               ? "bg-slate-900 text-white hover:-translate-y-0.5 hover:shadow-glow dark:bg-slate-100 dark:text-slate-900"
               : "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500"
