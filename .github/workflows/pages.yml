@@ -30,7 +30,7 @@ jobs:
 
       - name: Build (static export)
         env:
-          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          NEXT_PUBLIC_BASE_PATH: /Wayne-Kerr-AI-Agent
         run: npm run build
 
       - name: Deploy to gh-pages
