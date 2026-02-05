@@ -11,10 +11,10 @@ import type {
   GraphResult,
   LocalImage,
   Message,
-  Thread
+  Thread,
+  ToolOption
 } from "@/lib/types";
 import { truncate } from "@/lib/utils";
-import type { ToolOption } from "@/components/Sidebar";
 
 const makeId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto

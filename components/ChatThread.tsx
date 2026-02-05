@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AnalysisMode, ComposerDraft, Message } from "@/lib/types";
+import { AnalysisMode, ComposerDraft, Message, ToolOption } from "@/lib/types";
 import { cx } from "@/lib/utils";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageItem } from "@/components/MessageItem";
 import { Composer } from "@/components/Composer";
-import type { ToolOption } from "@/components/Sidebar";
 
 const TypingIndicator = ({ label }: { label: string }) => (
   <div className="mx-auto w-full max-w-4xl px-4 py-3">

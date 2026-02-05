@@ -14,6 +14,12 @@ export type LocalImage = {
 
 export type AnalysisMode = "identify_dut" | "interpret_graph" | "detect_resonance";
 
+export type ToolOption = {
+  id: AnalysisMode;
+  title: string;
+  description: string;
+};
+
 // --- DUT (Identify) result ---
 export type DUTResult = {
   componentType: "Inductor" | "Capacitor" | "Resistor" | "Unknown";
