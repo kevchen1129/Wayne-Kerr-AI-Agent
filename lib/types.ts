@@ -3,6 +3,7 @@ export type Thread = {
   title: string;
   mode: AnalysisMode;
   updatedAt: string;
+  isDraft?: boolean;
 };
 
 export type LocalImage = {

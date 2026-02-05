@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AnalysisMode, Message } from "@/lib/types";
 import { cx, formatTime } from "@/lib/utils";
 import { DUTResultCard } from "@/components/DUTResultCard";
@@ -31,6 +32,11 @@ const MODE_COLOR: Record<AnalysisMode, string> = {
 export function MessageItem({ message, onImageClick, onInsertSummary, labels }: MessageItemProps) {
   const isUser = message.role === "user";
   const showFrame = message.type !== "dut_result" && message.type !== "graph_result";
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-3">
@@ -52,7 +58,7 @@ export function MessageItem({ message, onImageClick, onInsertSummary, labels }: 
               )}
             >
               <span>{isUser ? labels.user : labels.assistant}</span>
-              <span>{formatTime(message.createdAt)}</span>
+              <span>{mounted ? formatTime(message.createdAt) : "—"}</span>
             </div>
 
             <div className="mt-3">

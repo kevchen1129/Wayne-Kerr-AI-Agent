@@ -8,12 +8,10 @@ type ChatHeaderProps = {
   onExport: () => void;
   onClear: () => void;
   onToggleLocale: () => void;
-  onEditWorkflow: () => void;
   labels: {
     activeThread: string;
     export: string;
     clear: string;
-    edit: string;
   };
 };
 
@@ -25,7 +23,6 @@ export function ChatHeader({
   onExport,
   onClear,
   onToggleLocale,
-  onEditWorkflow,
   labels
 }: ChatHeaderProps) {
   return (
@@ -50,17 +47,6 @@ export function ChatHeader({
         <span className="rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
           {activeWorkflow}
         </span>
-        <button
-          type="button"
-          onClick={onEditWorkflow}
-          className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-          </svg>
-          {labels.edit}
-        </button>
         <button
           type="button"
           onClick={onToggleLocale}

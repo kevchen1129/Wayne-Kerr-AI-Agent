@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { ChatLayout } from "@/components/ChatLayout";
 import { ChatThread } from "@/components/ChatThread";
 import { ImageModal } from "@/components/ImageModal";
-import { NewChatModal } from "@/components/NewChatModal";
 import type {
   AnalysisMode,
   ComposerDraft,
@@ -60,18 +59,20 @@ const UI_TEXT = {
     recentChats: "最近對話",
     updated: "更新",
     prototypeNote: "目前為 UI 原型；之後可將 mock `sendMessage()` 替換成 Vision API 呼叫。",
+    searchChats: "搜尋對話",
     activeThread: "目前對話",
     export: "匯出",
     clear: "清除",
     localeLabel: "中文",
-    newChatTitle: "新對話",
-    newChatSubtitle: "選擇要使用的功能",
+    share: "分享",
+    rename: "改名",
+    delete: "刪除",
+    save: "儲存",
     cancel: "取消",
-    confirm: "建立新對話",
-    edit: "編輯",
-    editTitle: "編輯功能",
-    editSubtitle: "更新這個對話所屬功能",
-    apply: "套用",
+    renamePlaceholder: "輸入新名稱",
+    emptyEyebrow: "快速開始",
+    emptyTitle: "開始新的量測分析",
+    emptySubtitle: "先選一個功能，再拍照或上傳量測圖表。",
     analyzing: "分析中…",
     result: "結果",
     user: "使用者",
@@ -83,18 +84,20 @@ const UI_TEXT = {
     recentChats: "Recent chats",
     updated: "Updated",
     prototypeNote: "Prototype UI only. Replace the mock `sendMessage()` later with your Vision API call.",
+    searchChats: "Search chats",
     activeThread: "Active thread",
     export: "Export",
     clear: "Clear",
     localeLabel: "EN",
-    newChatTitle: "New chat",
-    newChatSubtitle: "Choose a workflow",
+    share: "Share",
+    rename: "Rename",
+    delete: "Delete",
+    save: "Save",
     cancel: "Cancel",
-    confirm: "Create chat",
-    edit: "Edit",
-    editTitle: "Edit workflow",
-    editSubtitle: "Update this chat's workflow",
-    apply: "Apply",
+    renamePlaceholder: "New name",
+    emptyEyebrow: "Quick start",
+    emptyTitle: "Start a new measurement analysis",
+    emptySubtitle: "Pick a workflow first, then capture a photo or upload a graph.",
     analyzing: "Analyzing…",
     result: "Result",
     user: "User",
@@ -205,14 +208,17 @@ const mockResonanceResult: GraphResult = {
 };
 
 const now = new Date().toISOString();
+const draftThreadId = "thread-new";
 
 const initialThreads: Thread[] = [
+  { id: draftThreadId, title: "新對話", mode: "identify_dut", updatedAt: now, isDraft: true },
   { id: "thread-dut", title: "被斷元件測量建議", mode: "identify_dut", updatedAt: now },
   { id: "thread-eq", title: "等效電路", mode: "interpret_graph", updatedAt: now },
   { id: "thread-res", title: "共振頻率偵測", mode: "detect_resonance", updatedAt: now }
 ];
 
 const initialMessages: Record<string, Message[]> = {
+  [draftThreadId]: [],
   "thread-dut": [
     {
       id: "msg-dut-1",
@@ -293,7 +299,7 @@ const initialMessages: Record<string, Message[]> = {
 export default function Home() {
   const [locale, setLocale] = useState<"zh" | "en">("zh");
   const [threads, setThreads] = useState<Thread[]>(() => initialThreads);
-  const [activeThreadId, setActiveThreadId] = useState("thread-dut");
+  const [activeThreadId, setActiveThreadId] = useState(draftThreadId);
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>(
     () => initialMessages
   );
@@ -305,10 +311,6 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [typingByThread, setTypingByThread] = useState<Record<string, boolean>>({});
   const [activeImage, setActiveImage] = useState<string | null>(null);
-  const [newChatOpen, setNewChatOpen] = useState(false);
-  const [newChatMode, setNewChatMode] = useState<AnalysisMode>("identify_dut");
-  const [editWorkflowOpen, setEditWorkflowOpen] = useState(false);
-  const [editWorkflowMode, setEditWorkflowMode] = useState<AnalysisMode>("identify_dut");
 
   const toolOptions: ToolOption[] = useMemo(
     () =>
@@ -330,6 +332,7 @@ export default function Home() {
     toolOptions.find((tool) => tool.id === activeToolId) ?? toolOptions[0];
   const labels = UI_TEXT[locale];
   const localeToggleLabel = locale === "zh" ? "EN" : "中文";
+  const newChatTitle = locale === "zh" ? "新對話" : "New chat";
   const brand = {
     name: "WK Insight",
     subtitle: locale === "zh" ? "精密量測智慧助理" : "Precision Measurement Intelligence",
@@ -343,30 +346,50 @@ export default function Home() {
     );
   }, [activeThread]);
 
+  useEffect(() => {
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.isDraft ? { ...thread, title: newChatTitle } : thread
+      )
+    );
+  }, [newChatTitle]);
+
   const updateThreadMeta = (threadId: string, textSample?: string) => {
     setThreads((prev) => {
       const updated = prev.map((thread) => {
         if (thread.id !== threadId) return thread;
-        const title =
-          thread.title === "New chat" && textSample
-            ? truncate(textSample.replace(/\s+/g, " ").trim(), 32)
-            : thread.title;
-        return { ...thread, title, updatedAt: new Date().toISOString() };
+        const shouldRename =
+          Boolean(textSample) &&
+          (thread.title === "New chat" || thread.title === "新對話" || thread.isDraft);
+        const title = shouldRename
+          ? truncate(textSample!.replace(/\s+/g, " ").trim(), 32)
+          : thread.title;
+        return {
+          ...thread,
+          title,
+          updatedAt: new Date().toISOString(),
+          isDraft: false
+        };
       });
       return [...updated].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
     });
   };
 
-  const openNewChat = (mode?: AnalysisMode) => {
-    setNewChatMode(mode ?? "identify_dut");
-    setNewChatOpen(true);
+  const createDraftThread = (mode: AnalysisMode = "identify_dut") => {
+    const id = makeId();
+    const nowStamp = new Date().toISOString();
+    const newThread: Thread = {
+      id,
+      title: newChatTitle,
+      mode,
+      updatedAt: nowStamp,
+      isDraft: true
+    };
+    setThreads((prev) => [newThread, ...prev]);
+    setMessagesByThread((prev) => ({ ...prev, [id]: [] }));
+    setActiveThreadId(id);
+    setDraft((prev) => ({ ...prev, text: "", images: [], mode }));
     setSidebarOpen(false);
-  };
-
-  const openEditWorkflow = () => {
-    const mode = activeThread?.mode ?? "identify_dut";
-    setEditWorkflowMode(mode);
-    setEditWorkflowOpen(true);
   };
 
   const createThread = (mode: AnalysisMode) => {
@@ -375,7 +398,7 @@ export default function Home() {
     const nowStamp = new Date().toISOString();
     const newThread: Thread = {
       id,
-      title: tool ? tool.title[locale] : locale === "zh" ? "新對話" : "New chat",
+      title: tool ? tool.title[locale] : newChatTitle,
       mode,
       updatedAt: nowStamp
     };
@@ -383,31 +406,7 @@ export default function Home() {
     setMessagesByThread((prev) => ({ ...prev, [id]: [] }));
     setActiveThreadId(id);
     setDraft((prev) => ({ ...prev, mode }));
-    setNewChatOpen(false);
     setSidebarOpen(false);
-  };
-
-  const applyWorkflowEdit = (mode: AnalysisMode) => {
-    if (!activeThread) return;
-    const tool = TOOL_DEFS.find((t) => t.id === mode);
-    setThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === activeThread.id
-          ? {
-              ...thread,
-              mode,
-              title: tool ? tool.title[locale] : thread.title,
-              updatedAt: new Date().toISOString()
-            }
-          : thread
-      )
-    );
-    setDraft((prev) => ({ ...prev, mode }));
-    setEditWorkflowOpen(false);
-  };
-
-  const handleNewThread = () => {
-    openNewChat();
   };
 
   const handleSelectThread = (id: string) => {
@@ -425,12 +424,60 @@ export default function Home() {
     if (activeThreadId === id) {
       const remaining = threads.filter((t) => t.id !== id);
       if (remaining.length > 0) setActiveThreadId(remaining[0].id);
-      else openNewChat();
+      else createDraftThread();
     }
   };
 
+  const handleRenameThread = (id: string, title: string) => {
+    setThreads((prev) => {
+      const updated = prev.map((thread) =>
+        thread.id === id ? { ...thread, title, updatedAt: new Date().toISOString() } : thread
+      );
+      return [...updated].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    });
+  };
+
+  const handleShareThread = async (id: string) => {
+    const thread = threads.find((item) => item.id === id);
+    const messages = messagesByThread[id] ?? [];
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({ thread, messages }, null, 2));
+    } catch (err) {
+      console.error("Share failed", err);
+    }
+  };
+
+  const handleNewChat = () => {
+    const draftThread = threads.find((thread) => thread.isDraft);
+    if (draftThread) {
+      setActiveThreadId(draftThread.id);
+      setDraft({ text: "", images: [], mode: draftThread.mode });
+      setSidebarOpen(false);
+      return;
+    }
+    createDraftThread();
+  };
+
   const handleSelectTool = (mode: AnalysisMode) => {
-    openNewChat(mode);
+    const draftThread = threads.find((thread) => thread.isDraft);
+    if (!draftThread) {
+      createDraftThread(mode);
+      return;
+    }
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === draftThread.id
+          ? {
+              ...thread,
+              mode,
+              title: newChatTitle
+            }
+          : thread
+      )
+    );
+    setActiveThreadId(draftThread.id);
+    setDraft({ text: "", images: [], mode });
+    setSidebarOpen(false);
   };
 
   const handleImagesSelected = (files: FileList) => {
@@ -485,7 +532,7 @@ export default function Home() {
       ...prev,
       [activeThreadId]: [...(prev[activeThreadId] ?? []), ...newUserMessages]
     }));
-    updateThreadMeta(activeThreadId, text || "New chat");
+    updateThreadMeta(activeThreadId, text || activeTool.title);
     setDraft((prev) => ({ ...prev, text: "", images: [] }));
     setTypingByThread((prev) => ({ ...prev, [activeThreadId]: true }));
 
@@ -555,43 +602,54 @@ export default function Home() {
   return (
     <>
       <ChatLayout
-        tools={toolOptions}
-        activeToolId={activeToolId}
-        onSelectTool={handleSelectTool}
         brand={brand}
         labels={{
-          coreWorkflows: labels.coreWorkflows,
           newChat: labels.newChat,
           recentChats: labels.recentChats,
           updated: labels.updated,
-          prototypeNote: labels.prototypeNote
+          prototypeNote: labels.prototypeNote,
+          searchChats: labels.searchChats,
+          share: labels.share,
+          rename: labels.rename,
+          delete: labels.delete,
+          save: labels.save,
+          cancel: labels.cancel,
+          renamePlaceholder: labels.renamePlaceholder
         }}
         threads={threads}
         activeThreadId={activeThreadId}
         sidebarOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}
-        onNewThread={handleNewThread}
         onSelectThread={handleSelectThread}
+        onNewChat={handleNewChat}
         onDeleteThread={handleDeleteThread}
+        onRenameThread={handleRenameThread}
+        onShareThread={handleShareThread}
       >
         <ChatThread
           title={activeThread?.title ?? "New chat"}
           activeWorkflow={activeTool.title}
+          toolOptions={toolOptions}
+          activeToolId={activeToolId}
+          onSelectTool={handleSelectTool}
           labels={{
             analyzing: labels.analyzing,
             result: labels.result,
             user: labels.user,
             assistant: labels.assistant
           }}
+          emptyState={{
+            eyebrow: labels.emptyEyebrow,
+            title: labels.emptyTitle,
+            subtitle: labels.emptySubtitle
+          }}
           locale={locale}
           localeLabel={localeToggleLabel}
           onToggleLocale={() => setLocale((prev) => (prev === "zh" ? "en" : "zh"))}
-          onEditWorkflow={openEditWorkflow}
           headerLabels={{
             activeThread: labels.activeThread,
             export: labels.export,
-            clear: labels.clear,
-            edit: labels.edit
+            clear: labels.clear
           }}
           messages={activeMessages}
           isTyping={Boolean(typingByThread[activeThreadId])}
@@ -608,36 +666,6 @@ export default function Home() {
         />
         {activeImage && <ImageModal src={activeImage} onClose={() => setActiveImage(null)} />}
       </ChatLayout>
-
-      <NewChatModal
-        open={newChatOpen}
-        tools={toolOptions}
-        selectedId={newChatMode}
-        onSelect={(id) => setNewChatMode(id)}
-        onConfirm={() => createThread(newChatMode)}
-        onClose={() => setNewChatOpen(false)}
-        labels={{
-          title: labels.newChatTitle,
-          subtitle: labels.newChatSubtitle,
-          cancel: labels.cancel,
-          confirm: labels.confirm
-        }}
-      />
-
-      <NewChatModal
-        open={editWorkflowOpen}
-        tools={toolOptions}
-        selectedId={editWorkflowMode}
-        onSelect={(id) => setEditWorkflowMode(id)}
-        onConfirm={() => applyWorkflowEdit(editWorkflowMode)}
-        onClose={() => setEditWorkflowOpen(false)}
-        labels={{
-          title: labels.editTitle,
-          subtitle: labels.editSubtitle,
-          cancel: labels.cancel,
-          confirm: labels.apply
-        }}
-      />
     </>
   );
 }
