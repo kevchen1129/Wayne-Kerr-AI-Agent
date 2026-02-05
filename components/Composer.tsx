@@ -81,7 +81,7 @@ export function Composer({
   const canSend = draft.text.trim().length > 0 || draft.images.length > 0;
 
   return (
-    <div className="border-t border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+    <div className="border-t border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_-16px_30px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span

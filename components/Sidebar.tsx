@@ -102,7 +102,7 @@ export function Sidebar({
       />
       <aside
         className={cx(
-          "fixed inset-y-0 left-0 z-40 flex w-80 flex-col border-r border-slate-200/70 bg-white/90 p-4 shadow-glow backdrop-blur transition-transform dark:border-slate-800 dark:bg-slate-950/90 md:static md:flex md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-80 flex-col border-r border-slate-200/70 bg-white/90 p-3 shadow-glow backdrop-blur transition-transform dark:border-slate-800 dark:bg-slate-950/90 md:static md:flex md:translate-x-0 md:p-4",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -139,11 +139,11 @@ export function Sidebar({
           </button>
         </div>
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-4 space-y-2">
           <button
             type="button"
             onClick={onNewChat}
-            className="flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-3 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-100"
+            className="flex w-full items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-2.5 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-100"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14" />
@@ -170,7 +170,7 @@ export function Sidebar({
           </div>
         </div>
 
-        <div className="mt-6 text-xs uppercase tracking-[0.2em] text-slate-400">{labels.recentChats}</div>
+        <div className="mt-5 text-xs uppercase tracking-[0.2em] text-slate-400">{labels.recentChats}</div>
 
         <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
           {filteredThreads.map((thread) => (
@@ -202,7 +202,7 @@ export function Sidebar({
                   setRenameValue("");
                 }}
                 className={cx(
-                  "flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold leading-none text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:hover:bg-slate-800 dark:hover:text-slate-200",
+                  "flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold leading-none text-slate-400 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-700 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:hover:bg-slate-800 dark:hover:text-slate-200",
                   thread.id === activeThreadId &&
                     "opacity-100 text-white/90 hover:bg-white/15 hover:text-white dark:text-slate-600"
                 )}
@@ -217,7 +217,7 @@ export function Sidebar({
               </button>
               {openMenuId === thread.id && (
                 <div
-                  className="absolute right-3 top-12 z-20 w-44 rounded-2xl border border-slate-200 bg-white p-2 text-xs shadow-xl dark:border-slate-800 dark:bg-slate-950"
+                  className="absolute right-3 top-12 z-20 w-44 rounded-2xl border border-slate-200 bg-white p-2 text-sm shadow-xl dark:border-slate-800 dark:bg-slate-950"
                   onClick={(event) => event.stopPropagation()}
                 >
                   {renameId === thread.id ? (
