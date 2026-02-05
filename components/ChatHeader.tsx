@@ -26,8 +26,8 @@ export function ChatHeader({
   labels
 }: ChatHeaderProps) {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-      <div className="flex items-center gap-3">
+    <header className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={onOpenSidebar}
@@ -38,13 +38,17 @@ export function ChatHeader({
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{labels.activeThread}</div>
-          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</div>
+        <div className="min-w-0">
+          <div className="hidden text-xs uppercase tracking-[0.2em] text-slate-400 md:block">
+            {labels.activeThread}
+          </div>
+          <div className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {title}
+          </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
+        <span className="hidden rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:inline-flex">
           {activeWorkflow}
         </span>
         <button
@@ -62,16 +66,26 @@ export function ChatHeader({
         <button
           type="button"
           onClick={onExport}
-          className="rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
         >
-          {labels.export}
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 16V3" />
+            <path d="M8 7l4-4 4 4" />
+            <path d="M4 21h16" />
+          </svg>
+          <span className="hidden sm:inline">{labels.export}</span>
         </button>
         <button
           type="button"
           onClick={onClear}
-          className="rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
         >
-          {labels.clear}
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M6 6l1 14h10l1-14" />
+          </svg>
+          <span className="hidden sm:inline">{labels.clear}</span>
         </button>
       </div>
     </header>
