@@ -148,6 +148,7 @@ export function ChatThread({
             <MessageItem
               key={message.id}
               message={message}
+              locale={locale}
               onImageClick={onImageClick}
               onInsertSummary={onInsertSummary}
               labels={labels}

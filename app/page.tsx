@@ -38,16 +38,16 @@ const TOOL_DEFS: Array<{
     id: "interpret_graph",
     title: { zh: "等效電路", en: "Equivalent Circuit" },
     description: {
-      zh: "掃頻圖辨識後，建議 2/3/4 元件模型與分析說明。",
-      en: "From a sweep plot, recommend 2/3/4‑element equivalent circuit models."
+      zh: "掃頻響應推理電路模型，預設 3 元件；複雜共振可升級 4–5 元件。",
+      en: "Use frequency sweep response to infer 3‑element default; suggest 4–5 for complex resonances."
     }
   },
   {
-    id: "detect_resonance",
-    title: { zh: "共振頻率偵測", en: "Resonance Detection" },
+    id: "dc_bias_saturation",
+    title: { zh: "DC Bias 飽和分析", en: "DC Bias Saturation" },
     description: {
-      zh: "自動跳到主共振點並標示多個協振/反共振點。",
-      en: "Auto-jump to main resonance and mark multiple harmonic/anti‑resonance points."
+      zh: "掃 DC Bias 曲線，計算 L 下跌 20% 的飽和點與電流值。",
+      en: "Analyze DC bias sweep to find the 20% inductance drop point."
     }
   }
 ];
@@ -60,6 +60,7 @@ const UI_TEXT = {
     updated: "更新",
     prototypeNote: "目前為 UI 原型；之後可將 mock `sendMessage()` 替換成 Vision API 呼叫。",
     searchChats: "搜尋對話",
+    noResults: "找不到相符的對話",
     activeThread: "目前對話",
     export: "匯出",
     clear: "清除",
@@ -85,6 +86,7 @@ const UI_TEXT = {
     updated: "Updated",
     prototypeNote: "Prototype UI only. Replace the mock `sendMessage()` later with your Vision API call.",
     searchChats: "Search chats",
+    noResults: "No chats found",
     activeThread: "Active thread",
     export: "Export",
     clear: "Clear",
@@ -109,7 +111,7 @@ const tdkInductorImage =
   "https://product.tdk.com/system/files/styles/tech_note_detail_thumbnail/private/thumb_pov_inductors_tfm-2.png?itok=Jzw3PM6O";
 const sweepGraphImage =
   "https://commons.wikimedia.org/wiki/Special:FilePath/Boost_bode.png";
-const resonanceGraphImage =
+const dcBiasGraphImage =
   "https://commons.wikimedia.org/wiki/Special:FilePath/Harmonic_oscillator_gain.png";
 
 // --- Mock DUT result (TDK inductor example) ---
@@ -149,62 +151,120 @@ const mockDUTResult: DUTResult = {
 
 // --- Mock Graph result (Equivalent circuit guidance) ---
 const mockGraphResult: GraphResult = {
-  graphTypeGuess: "|Z| & phase sweep",
+  graphTypeGuess: "Equivalent Circuit Recommendation (for modeling use)",
+  title: {
+    zh: "等效電路建議（工程版）",
+    en: "Equivalent Circuit Recommendation (for modeling use)"
+  },
   confidence: 0.84,
   resonanceFrequency: "~6.8 MHz",
+  summaryCards: [
+    {
+      label: { zh: "建議模型", en: "Suggested model" },
+      value: { zh: "Series Ls–Rs + Cp", en: "Series Ls–Rs + Cp" },
+      tone: "info"
+    },
+    {
+      label: { zh: "有效擬合頻段", en: "Valid modeling band" },
+      value: { zh: "100 kHz – 5 MHz", en: "100 kHz – 5 MHz" },
+      tone: "default"
+    },
+    {
+      label: { zh: "第一共振點", en: "First resonance detected" },
+      value: { zh: "~6.8 MHz", en: "~6.8 MHz" },
+      tone: "default"
+    },
+    {
+      label: { zh: "擬合規則", en: "Fitting rule" },
+      value: { zh: "避免使用共振以上資料", en: "Avoid data above resonance" },
+      tone: "warning"
+    },
+    {
+      label: { zh: "適用範圍", en: "Suitable for" },
+      value: {
+        zh: "低 MHz 功率設計與紋波估算",
+        en: "Low‑MHz power design & ripple estimation"
+      },
+      tone: "default"
+    },
+    {
+      label: { zh: "高頻/多共振", en: "High‑frequency / multi‑resonance" },
+      value: { zh: "建議改用高階模型", en: "Consider higher‑order model" },
+      tone: "warning"
+    }
+  ],
+  summaryText: {
+    zh:
+      "此頻率掃描適合做等效電路擬合。預設使用 3 元件 Series Ls–Rs + Cp，擬合頻段建議限制在 100 kHz – 5 MHz。共振以上的數據不利於穩定擬合；若出現多重共振或高頻寄生效應，建議升級 4–5 元件模型。",
+    en:
+      "Frequency sweep suggests a 3‑element Series Ls–Rs + Cp model. Fit within 100 kHz – 5 MHz and avoid data above the first resonance. For multi‑resonance or high‑frequency parasitics, consider a 4–5 element model."
+  },
   detectedFeatures: [
     { feature: "Q-peak", frequency: "~4.2 MHz", notes: "usable band" },
-    { feature: "Resonance", frequency: "~6.8 MHz", notes: "phase crosses zero" },
-    { feature: "Parasitic-dominant", frequency: "> ~10 MHz", notes: "ESL dominates" }
+    { feature: "Resonance", frequency: "~6.8 MHz", notes: "first resonance" },
+    { feature: "Parasitic-dominant", frequency: "> ~10 MHz", notes: "parasitic rise" }
   ],
-  interpretation: [
-    "建議先用 2 元件 series Ls-Rs 擬合 0.1–3 MHz。",
-    "若相位提前翻轉，改用 3 元件 (Ls-Rs + Cp) 模型。",
-    "若出現次級峰值，再升級到 4 元件 RLC 模型。"
-  ],
+  interpretation: [],
   recommendedNextTests: [
     {
-      action: "選擇模型複雜度（2/3/4 元件）並分頻段擬合",
-      why: "提高參數穩定性並避免共振區域失真。"
+      action: "Confirm first resonance near ~6.8 MHz",
+      why: "Resonance defines the upper bound for stable fitting."
     },
     {
-      action: "套用 OPEN/SHORT 補償",
-      why: "移除治具寄生影響，讓等效電路更準確。"
+      action: "If multi‑resonance appears, test 4–5 element models",
+      why: "Extra parasitic terms improve fit accuracy."
     }
   ],
-  recommendedMeasurementBand: "100 kHz – 5 MHz for fitting; avoid resonance peak",
-  suggestedEquivalentCircuit:
-    "建議電路：2 元件 series Ls-Rs 起步，必要時加入 Cp（3 元件），若有次峰則用 4 元件 RLC。"
+  recommendedMeasurementBand: "100 kHz – 5 MHz",
+  suggestedEquivalentCircuit: "Series Ls–Rs + Cp (3‑element default)."
 };
 
-// --- Mock Resonance result (Multiple resonance points) ---
-const mockResonanceResult: GraphResult = {
-  graphTypeGuess: "|Z| vs Frequency (resonance detection)",
+// --- Mock DC Bias Saturation result (Inductance drop) ---
+const mockDcBiasResult: GraphResult = {
+  graphTypeGuess: "L vs DC Current (DC bias sweep)",
+  title: { zh: "DC Bias 飽和分析（工程版）", en: "DC Bias Saturation Analysis" },
   confidence: 0.9,
-  resonanceFrequency: "12.4 MHz",
-  detectedFeatures: [
-    { feature: "Resonance", frequency: "12.4 MHz", notes: "主共振，游標已跳點" },
-    { feature: "Anti-resonance", frequency: "18.9 MHz", notes: "反共振" },
-    { feature: "Resonance", frequency: "26.1 MHz", notes: "次級共振" },
-    { feature: "Resonance", frequency: "33.7 MHz", notes: "第三共振" }
-  ],
-  interpretation: [
-    "已自動標示主共振與多個諧振/反共振點。",
-    "可逐點檢視 Q、ESR 與相位變化。",
-    "若噪聲影響峰值位置，建議降低電平或提高解析度。"
-  ],
-  recommendedNextTests: [
+  saturationCurrent: "1.85 A (L = 0.8 × L₀)",
+  summaryCards: [
     {
-      action: "縮小頻帶到 8–40 MHz 並提高解析度",
-      why: "讓多個共振點定位更精準。"
+      label: { zh: "參考 L₀", en: "Reference L₀" },
+      value: { zh: "低偏壓區段", en: "Low / zero bias region" },
+      tone: "info"
     },
     {
-      action: "加入 ESR 最小與 Q 峰值標記",
-      why: "輔助判斷損耗與阻尼。"
+      label: { zh: "I@−20% (L = 0.8×L₀)", en: "I@−20% (L = 0.8×L₀)" },
+      value: { zh: "1.85 A", en: "1.85 A" },
+      tone: "warning"
+    },
+    {
+      label: { zh: "額外參考點", en: "Optional points" },
+      value: { zh: "−10% @ 1.45 A, −30% @ 2.25 A", en: "−10% @ 1.45 A, −30% @ 2.25 A" },
+      tone: "default"
     }
   ],
-  recommendedMeasurementBand: "8–40 MHz (focus on resonance neighborhood)",
-  suggestedEquivalentCircuit: "Resonance-focused series RLC; add parallel Cp for anti-resonance fitting."
+  summaryText: {
+    zh:
+      "以低偏壓區段作為 L₀ 基準，計算 L 下降 20% 的 I_sat 作為飽和點。可依需求加入 −10% / −30% 參考點，用於材料或溫度比較。",
+    en:
+      "Use low‑bias inductance as L₀ and mark the 20% drop point as I_sat. Optional −10% / −30% points can be added for material or temperature comparison."
+  },
+  detectedFeatures: [
+    { feature: "Inductance-drop", frequency: "I = 1.85 A", notes: "L 下降 20% 的飽和點" },
+    { feature: "Inductance-drop", frequency: "I = 1.45 A", notes: "L 下降 10% (參考點)" },
+    { feature: "Inductance-drop", frequency: "I = 2.25 A", notes: "L 下降 30% (參考點)" }
+  ],
+  interpretation: [],
+  recommendedNextTests: [
+    {
+      action: "提高 DC bias 解析度至 0.05–0.1 A",
+      why: "更精準定位飽和點與斜率變化。"
+    },
+    {
+      action: "增加溫度條件（例如 25°C / 85°C）",
+      why: "評估溫升對飽和點的影響。"
+    }
+  ],
+  recommendedMeasurementBand: "0 A – 3 A (DC bias sweep)"
 };
 
 const now = new Date().toISOString();
@@ -214,7 +274,7 @@ const initialThreads: Thread[] = [
   { id: draftThreadId, title: "新對話", mode: "identify_dut", updatedAt: now, isDraft: true },
   { id: "thread-dut", title: "被斷元件測量建議", mode: "identify_dut", updatedAt: now },
   { id: "thread-eq", title: "等效電路", mode: "interpret_graph", updatedAt: now },
-  { id: "thread-res", title: "共振頻率偵測", mode: "detect_resonance", updatedAt: now }
+  { id: "thread-res", title: "DC Bias 飽和分析", mode: "dc_bias_saturation", updatedAt: now }
 ];
 
 const initialMessages: Record<string, Message[]> = {
@@ -258,7 +318,7 @@ const initialMessages: Record<string, Message[]> = {
       id: "msg-eq-2",
       role: "assistant",
       type: "text",
-      text: "掃頻圖顯示適合等效電路分析，以下為建議的 2/3/4 元件模型選擇。",
+      text: "掃頻圖適合等效電路分析；預設 3 元件模型，若多共振可升級 4–5 元件。",
       createdAt: now
     },
     {
@@ -274,23 +334,23 @@ const initialMessages: Record<string, Message[]> = {
       id: "msg-res-1",
       role: "user",
       type: "image",
-      imageUrl: resonanceGraphImage,
-      caption: "Resonance scan",
-      mode: "detect_resonance",
+      imageUrl: dcBiasGraphImage,
+      caption: "DC bias sweep",
+      mode: "dc_bias_saturation",
       createdAt: now
     },
     {
       id: "msg-res-2",
       role: "assistant",
       type: "text",
-      text: "已自動跳到主共振點並標示多個諧振/反共振點（含數值）。",
+      text: "已分析 DC bias 曲線，計算 L 下跌 20% 的飽和點與電流值。",
       createdAt: now
     },
     {
       id: "msg-res-3",
       role: "assistant",
       type: "graph_result",
-      result: mockResonanceResult,
+      result: mockDcBiasResult,
       createdAt: now
     }
   ]
@@ -542,7 +602,7 @@ export default function Home() {
       const textByMode: Record<AnalysisMode, string> = {
         identify_dut: "已辨識元件類型，可由照片/編號對照資料表，並提供建議量測設定與日常 working range。",
         interpret_graph: "此掃頻圖適合等效電路分析，已整理 2/3/4 元件模型建議。",
-        detect_resonance: "已偵測主共振並標示多個諧振/反共振點（含數值）。"
+        dc_bias_saturation: "此 DC bias 掃描可用於飽和分析，已標示 L 下跌 20% 的電流點。"
       };
 
       const textMsg: Message = {
@@ -566,7 +626,7 @@ export default function Home() {
               id: makeId(),
               role: "assistant",
               type: "graph_result",
-              result: mode === "interpret_graph" ? mockGraphResult : mockResonanceResult,
+              result: mode === "interpret_graph" ? mockGraphResult : mockDcBiasResult,
               createdAt: new Date().toISOString()
             };
 
@@ -609,6 +669,7 @@ export default function Home() {
           updated: labels.updated,
           prototypeNote: labels.prototypeNote,
           searchChats: labels.searchChats,
+          noResults: labels.noResults,
           share: labels.share,
           rename: labels.rename,
           delete: labels.delete,
@@ -617,6 +678,7 @@ export default function Home() {
           renamePlaceholder: labels.renamePlaceholder
         }}
         threads={threads}
+        messagesByThread={messagesByThread}
         activeThreadId={activeThreadId}
         sidebarOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}

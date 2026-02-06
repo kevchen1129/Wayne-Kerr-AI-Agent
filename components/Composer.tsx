@@ -8,7 +8,7 @@ import { cx } from "@/lib/utils";
 const MODE_LABELS: Record<AnalysisMode, { zh: string; en: string }> = {
   identify_dut: { zh: "被斷元件測量建議", en: "DUT Measurement Setup" },
   interpret_graph: { zh: "等效電路", en: "Equivalent Circuit" },
-  detect_resonance: { zh: "共振頻率偵測", en: "Resonance Detection" }
+  dc_bias_saturation: { zh: "DC Bias 飽和分析", en: "DC Bias Saturation" }
 };
 
 const MODE_HINTS: Record<AnalysisMode, { zh: string; en: string }> = {
@@ -17,25 +17,25 @@ const MODE_HINTS: Record<AnalysisMode, { zh: string; en: string }> = {
     en: "Upload a part photo to identify R/L/C and get recommended mode, frequency, level, and working range."
   },
   interpret_graph: {
-    zh: "上傳掃頻圖，判斷等效電路用途並建議 2/3/4 元件模型。",
-    en: "Upload a sweep plot to suggest a 2/3/4‑element equivalent circuit model."
+    zh: "上傳掃頻圖，以頻率響應推理等效電路（預設 3 元件）。",
+    en: "Upload a sweep plot to infer an equivalent circuit (default 3‑element)."
   },
-  detect_resonance: {
-    zh: "自動偵測主共振點並標示多個協振/反共振點。",
-    en: "Detect the main resonance and mark multiple harmonic / anti‑resonance points."
+  dc_bias_saturation: {
+    zh: "上傳 DC Bias 掃描曲線，計算飽和點（L 下跌 20%）。",
+    en: "Upload a DC bias sweep to find the 20% inductance drop point."
   }
 };
 
 const MODE_BADGE: Record<AnalysisMode, string> = {
   identify_dut: "DUT",
   interpret_graph: "EQ",
-  detect_resonance: "Res"
+  dc_bias_saturation: "DC"
 };
 
 const MODE_BADGE_COLOR: Record<AnalysisMode, string> = {
   identify_dut: "bg-blue-600",
   interpret_graph: "bg-violet-600",
-  detect_resonance: "bg-amber-600"
+  dc_bias_saturation: "bg-amber-600"
 };
 
 type ComposerProps = {
@@ -166,12 +166,12 @@ export function Composer({
                   ? "例如：元件上印字、目標頻段、預期 L/C/R…"
                   : mode === "interpret_graph"
                     ? "例如：掃頻範圍、曲線型態、想要的等效電路複雜度…"
-                    : "例如：想要標示幾個共振點、是否需要游標跳點說明…"
+                    : "例如：DC bias 範圍、要標示的 L 下降比例…"
                 : mode === "identify_dut"
                   ? "e.g. markings, target band, expected L/C/R..."
                   : mode === "interpret_graph"
                     ? "e.g. sweep range, curve type, desired model complexity..."
-                    : "e.g. how many resonance points to mark..."
+                    : "e.g. DC bias range, target drop percentage..."
             }
             className="w-full resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />

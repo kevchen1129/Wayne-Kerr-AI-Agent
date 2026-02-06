@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Thread } from "@/lib/types";
+import { Message, Thread } from "@/lib/types";
 import { cx, formatTime } from "@/lib/utils";
 
 type SidebarProps = {
@@ -16,6 +16,7 @@ type SidebarProps = {
     updated: string;
     prototypeNote: string;
     searchChats: string;
+    noResults: string;
     share: string;
     rename: string;
     delete: string;
@@ -24,6 +25,7 @@ type SidebarProps = {
     renamePlaceholder: string;
   };
   threads: Thread[];
+  messagesByThread: Record<string, Message[]>;
   activeThreadId: string;
   isOpen: boolean;
   onClose: () => void;
@@ -38,6 +40,7 @@ export function Sidebar({
   brand,
   labels,
   threads,
+  messagesByThread,
   activeThreadId,
   isOpen,
   onClose,
@@ -84,10 +87,87 @@ export function Sidebar({
     setRenameId(null);
   };
 
+  const resolveLocalized = (value: string | { zh: string; en: string } | undefined) => {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    return `${value.zh ?? ""} ${value.en ?? ""}`.trim();
+  };
+
+  const stringifyMessage = (message: Message) => {
+    if (message.type === "text") return message.text;
+    if (message.type === "image") return message.caption ?? "";
+    if (message.type === "dut_result") {
+      const { componentType, packageGuess, estimatedWorkingRange, recommendedSetup, whatToConfirm, warnings } =
+        message.result;
+      return [
+        componentType,
+        packageGuess,
+        estimatedWorkingRange?.recommendedFrequencyBand,
+        estimatedWorkingRange?.srFEstimate,
+        estimatedWorkingRange?.notes,
+        recommendedSetup.mode,
+        recommendedSetup.primaryParams?.join(" "),
+        recommendedSetup.testFrequencySuggestions?.map((item) => `${item.label} ${item.value} ${item.rationale ?? ""}`).join(" "),
+        recommendedSetup.testLevel,
+        recommendedSetup.dcBias,
+        recommendedSetup.fixture,
+        recommendedSetup.compensation?.join(" "),
+        whatToConfirm?.join(" "),
+        warnings?.join(" ")
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    if (message.type === "graph_result") {
+      const {
+        graphTypeGuess,
+        resonanceFrequency,
+        saturationCurrent,
+        summaryCards,
+        summaryText,
+        detectedFeatures,
+        interpretation,
+        recommendedNextTests,
+        recommendedMeasurementBand,
+        suggestedEquivalentCircuit
+      } = message.result;
+      return [
+        graphTypeGuess,
+        resonanceFrequency,
+        saturationCurrent,
+        summaryCards?.map((card) => `${resolveLocalized(card.label)} ${resolveLocalized(card.value)}`).join(" "),
+        resolveLocalized(summaryText),
+        detectedFeatures?.map((item) => `${item.feature} ${item.frequency ?? ""} ${item.notes ?? ""}`).join(" "),
+        interpretation?.join(" "),
+        recommendedNextTests?.map((item) => `${item.action} ${item.why}`).join(" "),
+        recommendedMeasurementBand,
+        suggestedEquivalentCircuit
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    return "";
+  };
+
   const filteredThreads = threads.filter((thread) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
-    return thread.title.toLowerCase().includes(query);
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const normalizedQuery = normalize(query);
+    const altQuery =
+      normalizedQuery.includes("hz") && !normalizedQuery.includes("khz")
+        ? normalizedQuery.replace("hz", "khz")
+        : null;
+    if (normalize(thread.title).includes(normalizedQuery)) return true;
+    const messages = messagesByThread[thread.id] ?? [];
+    return messages.some((message) => {
+      const blob = stringifyMessage(message);
+      const normalizedBlob = normalize(blob);
+      return (
+        normalizedBlob.includes(normalizedQuery) ||
+        (altQuery ? normalizedBlob.includes(altQuery) : false)
+      );
+    });
   });
 
   return (
@@ -291,7 +371,7 @@ export function Sidebar({
           ))}
           {filteredThreads.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-200/80 bg-white/70 px-3 py-4 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-              No chats found
+              {labels.noResults}
             </div>
           )}
         </div>

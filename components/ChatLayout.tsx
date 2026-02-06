@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { Thread } from "@/lib/types";
+import { Message, Thread } from "@/lib/types";
 
 export type ChatLayoutProps = {
   brand: {
@@ -16,6 +16,7 @@ export type ChatLayoutProps = {
     updated: string;
     prototypeNote: string;
     searchChats: string;
+    noResults: string;
     share: string;
     rename: string;
     delete: string;
@@ -24,6 +25,7 @@ export type ChatLayoutProps = {
     renamePlaceholder: string;
   };
   threads: Thread[];
+  messagesByThread: Record<string, Message[]>;
   activeThreadId: string;
   sidebarOpen: boolean;
   onCloseSidebar: () => void;
@@ -39,6 +41,7 @@ export function ChatLayout({
   brand,
   labels,
   threads,
+  messagesByThread,
   activeThreadId,
   sidebarOpen,
   onCloseSidebar,
@@ -55,6 +58,7 @@ export function ChatLayout({
         brand={brand}
         labels={labels}
         threads={threads}
+        messagesByThread={messagesByThread}
         activeThreadId={activeThreadId}
         isOpen={sidebarOpen}
         onClose={onCloseSidebar}

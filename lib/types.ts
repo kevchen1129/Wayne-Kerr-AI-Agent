@@ -12,7 +12,9 @@ export type LocalImage = {
   file?: File;
 };
 
-export type AnalysisMode = "identify_dut" | "interpret_graph" | "detect_resonance";
+export type AnalysisMode = "identify_dut" | "interpret_graph" | "dc_bias_saturation";
+
+export type LocalizedString = string | { zh: string; en: string };
 
 export type ToolOption = {
   id: AnalysisMode;
@@ -50,15 +52,26 @@ export type GraphDetectedFeature =
   | "Q-peak"
   | "ESR-min"
   | "Parasitic-dominant"
-  | "Noise/aliasing";
+  | "Noise/aliasing"
+  | "Inductance-drop";
 
 export type GraphResult = {
   graphTypeGuess: string;
+  /** Optional localized title for the card */
+  title?: LocalizedString;
   confidence: number;
   /** 共振頻率 Resonance frequency (e.g. from L(f) or |Z|(f)) */
   resonanceFrequency?: string;
   /** 飽和電流 Saturation current (e.g. from L vs I curve, inductor) */
   saturationCurrent?: string;
+  /** Summary cards for engineering-style recommendations */
+  summaryCards?: Array<{
+    label: LocalizedString;
+    value: LocalizedString;
+    tone?: "default" | "info" | "warning";
+  }>;
+  /** Optional long-form summary text */
+  summaryText?: LocalizedString;
   detectedFeatures: Array<{
     feature: GraphDetectedFeature;
     frequency?: string;

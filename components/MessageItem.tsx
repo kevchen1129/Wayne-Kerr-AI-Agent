@@ -10,6 +10,7 @@ type MessageItemProps = {
   message: Message;
   onImageClick: (src: string) => void;
   onInsertSummary: (summary: string) => void;
+  locale: "zh" | "en";
   labels: {
     user: string;
     assistant: string;
@@ -20,16 +21,22 @@ type MessageItemProps = {
 const MODE_LABEL: Record<AnalysisMode, string> = {
   identify_dut: "DUT",
   interpret_graph: "Sweep",
-  detect_resonance: "Resonance"
+  dc_bias_saturation: "DC Bias"
 };
 
 const MODE_COLOR: Record<AnalysisMode, string> = {
   identify_dut: "bg-blue-600",
   interpret_graph: "bg-violet-600",
-  detect_resonance: "bg-amber-600"
+  dc_bias_saturation: "bg-amber-600"
 };
 
-export function MessageItem({ message, onImageClick, onInsertSummary, labels }: MessageItemProps) {
+export function MessageItem({
+  message,
+  onImageClick,
+  onInsertSummary,
+  locale,
+  labels
+}: MessageItemProps) {
   const isUser = message.role === "user";
   const showFrame = message.type !== "dut_result" && message.type !== "graph_result";
   const [mounted, setMounted] = useState(false);
@@ -114,7 +121,7 @@ export function MessageItem({ message, onImageClick, onInsertSummary, labels }: 
               {message.type === "graph_result" && (
                 <div className="mt-2">
                   <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-400">{labels.result}</div>
-                  <GraphResultCard result={message.result} onInsertSummary={onInsertSummary} />
+                  <GraphResultCard result={message.result} locale={locale} onInsertSummary={onInsertSummary} />
                 </div>
               )}
             </div>
