@@ -284,7 +284,13 @@ const mockDcBiasResult: GraphResult = {
       { current: 16.0, inductance: 6.7 },
       { current: 18.0, inductance: 6.55 },
       { current: 20.0, inductance: 6.5 }
-    ]
+    ],
+    testConditions: {
+      acLevel: "1 V",
+      sweep: "0–20 A",
+      frequency: "1 kHz"
+    },
+    kneePoint: { current: 10.8, inductance: 9.0 }
   }
 };
 

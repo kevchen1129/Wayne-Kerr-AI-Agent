@@ -96,6 +96,12 @@ export type GraphResult = {
     plotAreaPct?: { left: number; top: number; right: number; bottom: number };
     dropPoints: Array<{ percent: number; current: number }>;
     curvePoints?: Array<{ current: number; inductance: number }>;
+    testConditions?: {
+      acLevel?: string;
+      sweep?: string;
+      frequency?: string;
+    };
+    kneePoint?: { current: number; inductance: number };
   };
   /** 等效電路 Equivalent circuit */
   suggestedEquivalentCircuit?: string;

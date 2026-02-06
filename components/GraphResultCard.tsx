@@ -105,6 +105,8 @@ export function GraphResultCard({ result, locale, onInsertSummary }: GraphResult
   const interpretationText = resolveText(result.summaryText, locale) || "";
   const dropHeader =
     locale === "zh" ? "下降 20% (L = 0.8 * L0)" : "-20% (L = 0.8 * L0)";
+  const testConditions = dcBiasMeta?.testConditions;
+  const kneePoint = dcBiasMeta?.kneePoint;
   const dcBiasSummary = useMemo(() => {
     if (!dcBiasMeta || !dropPoint) return null;
     const l0Value = dcBiasMeta.l0.value;
@@ -421,6 +423,44 @@ export function GraphResultCard({ result, locale, onInsertSummary }: GraphResult
           </div>
         )}
       </div>
+
+      {isDcBias && (testConditions || kneePoint) && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {testConditions && (
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                {locale === "zh" ? "測試條件" : "Testing conditions"}
+              </div>
+              <div className="mt-2 flex flex-col gap-1 text-sm">
+                {testConditions.acLevel && (
+                  <span>{locale === "zh" ? `AC 電平：${testConditions.acLevel}` : `AC test level: ${testConditions.acLevel}`}</span>
+                )}
+                {testConditions.sweep && (
+                  <span>{locale === "zh" ? `掃描：${testConditions.sweep}` : `Sweep: ${testConditions.sweep}`}</span>
+                )}
+                {testConditions.frequency && (
+                  <span>{locale === "zh" ? `頻率：${testConditions.frequency}` : `Frequency: ${testConditions.frequency}`}</span>
+                )}
+              </div>
+            </div>
+          )}
+          {kneePoint && (
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                {locale === "zh" ? "Knee 電流" : "Knee current"}
+              </div>
+              <div className="mt-2 flex flex-col gap-1 text-sm">
+                <span>
+                  {formatNumber(kneePoint.current, 2)} {dcBiasMeta?.axisRange?.current.unit ?? "A"}
+                </span>
+                <span className="text-slate-500 dark:text-slate-300">
+                  {locale === "zh" ? "L 值" : "L value"}: {formatNumber(kneePoint.inductance, 2)} {dcBiasMeta?.l0.unit ?? "µH"}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {isDcBias && (
         <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
