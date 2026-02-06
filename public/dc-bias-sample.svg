@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="960" height="600" viewBox="0 0 960 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="600" fill="#ffffff"/>
+  <rect x="96" y="72" width="792" height="456" rx="18" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2"/>
+  <line x1="140" y1="496" x2="852" y2="496" stroke="#94a3b8" stroke-width="3"/>
+  <line x1="140" y1="496" x2="140" y2="120" stroke="#94a3b8" stroke-width="3"/>
+  <polyline points="140,167 258.7,176.4 377.3,223.4 496,289.2 579.1,355 662.1,411.4 757.1,458.4 852,486.6" stroke="#0f172a" stroke-width="6" fill="none"/>
+  <circle cx="377.3" cy="223.4" r="8" fill="#38bdf8"/>
+  <circle cx="579.1" cy="355" r="8" fill="#38bdf8"/>
+  <circle cx="757.1" cy="458.4" r="8" fill="#38bdf8"/>
+  <text x="140" y="532" font-family="Open Sans, Arial, sans-serif" font-size="20" fill="#64748b">DC current (A)</text>
+  <text x="48" y="120" font-family="Open Sans, Arial, sans-serif" font-size="20" fill="#64748b" transform="rotate(-90 48 120)">Inductance (µH)</text>
+  <text x="140" y="108" font-family="Open Sans, Arial, sans-serif" font-size="18" fill="#94a3b8">L vs DC bias (sample)</text>
+</svg>

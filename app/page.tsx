@@ -107,12 +107,12 @@ const UI_TEXT = {
   }
 };
 
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const tdkInductorImage =
   "https://product.tdk.com/system/files/styles/tech_note_detail_thumbnail/private/thumb_pov_inductors_tfm-2.png?itok=Jzw3PM6O";
 const sweepGraphImage =
   "https://commons.wikimedia.org/wiki/Special:FilePath/Boost_bode.png";
-const dcBiasGraphImage =
-  "https://commons.wikimedia.org/wiki/Special:FilePath/Harmonic_oscillator_gain.png";
+const dcBiasGraphImage = `${assetBasePath}/dc-bias-real.png`;
 
 // --- Mock DUT result (TDK inductor example) ---
 const mockDUTResult: DUTResult = {
@@ -224,7 +224,7 @@ const mockDcBiasResult: GraphResult = {
   graphTypeGuess: "L vs DC Current (DC bias sweep)",
   title: { zh: "DC Bias 飽和分析（工程版）", en: "DC Bias Saturation Analysis" },
   confidence: 0.9,
-  saturationCurrent: "1.85 A (L = 0.8 × L₀)",
+  saturationCurrent: "12.35 A (L = 0.8 × L₀)",
   summaryCards: [
     {
       label: { zh: "參考 L₀", en: "Reference L₀" },
@@ -233,25 +233,18 @@ const mockDcBiasResult: GraphResult = {
     },
     {
       label: { zh: "I@−20% (L = 0.8×L₀)", en: "I@−20% (L = 0.8×L₀)" },
-      value: { zh: "1.85 A", en: "1.85 A" },
+      value: { zh: "12.35 A", en: "12.35 A" },
       tone: "warning"
-    },
-    {
-      label: { zh: "額外參考點", en: "Optional points" },
-      value: { zh: "−10% @ 1.45 A, −30% @ 2.25 A", en: "−10% @ 1.45 A, −30% @ 2.25 A" },
-      tone: "default"
     }
   ],
   summaryText: {
     zh:
-      "以低偏壓區段作為 L₀ 基準，計算 L 下降 20% 的 I_sat 作為飽和點。可依需求加入 −10% / −30% 參考點，用於材料或溫度比較。",
+      "以低偏壓區段作為 L₀ 基準，計算 L 下降 20% 的 I_sat 作為飽和點。",
     en:
-      "Use low‑bias inductance as L₀ and mark the 20% drop point as I_sat. Optional −10% / −30% points can be added for material or temperature comparison."
+      "Use low‑bias inductance as L₀ and mark the 20% drop point as I_sat."
   },
   detectedFeatures: [
-    { feature: "Inductance-drop", frequency: "I = 1.85 A", notes: "L 下降 20% 的飽和點" },
-    { feature: "Inductance-drop", frequency: "I = 1.45 A", notes: "L 下降 10% (參考點)" },
-    { feature: "Inductance-drop", frequency: "I = 2.25 A", notes: "L 下降 30% (參考點)" }
+    { feature: "Inductance-drop", frequency: "I = 12.35 A", notes: "L 下降 20% 的飽和點" },
   ],
   interpretation: [],
   recommendedNextTests: [
@@ -264,7 +257,35 @@ const mockDcBiasResult: GraphResult = {
       why: "評估溫升對飽和點的影響。"
     }
   ],
-  recommendedMeasurementBand: "0 A – 3 A (DC bias sweep)"
+  recommendedMeasurementBand: "0 A – 20 A (DC bias sweep)",
+  sourceImageUrl: dcBiasGraphImage,
+  dcBiasMeta: {
+    l0: { value: 10.0, unit: "µH" },
+    currentRange: { min: 0, max: 20, unit: "A" },
+    axisRange: {
+      current: { min: 0, max: 20, unit: "A" },
+      inductance: { min: 6.5, max: 10.5, unit: "µH" }
+    },
+    plotAreaPct: { left: 0.105, top: 0.15, right: 0.979, bottom: 0.797 },
+    dropPoints: [{ percent: 20, current: 12.35 }],
+    curvePoints: [
+      { current: 0.0, inductance: 10.0 },
+      { current: 2.0, inductance: 10.0 },
+      { current: 4.0, inductance: 9.98 },
+      { current: 6.0, inductance: 9.95 },
+      { current: 8.0, inductance: 9.8 },
+      { current: 9.5, inductance: 9.5 },
+      { current: 10.5, inductance: 9.2 },
+      { current: 11.5, inductance: 8.7 },
+      { current: 12.35, inductance: 8.0 },
+      { current: 13.0, inductance: 7.7 },
+      { current: 14.0, inductance: 7.2 },
+      { current: 15.0, inductance: 6.9 },
+      { current: 16.0, inductance: 6.7 },
+      { current: 18.0, inductance: 6.55 },
+      { current: 20.0, inductance: 6.5 }
+    ]
+  }
 };
 
 const now = new Date().toISOString();
@@ -613,6 +634,9 @@ export default function Home() {
         createdAt: new Date().toISOString()
       };
 
+      const lastImage = [...newUserMessages]
+        .reverse()
+        .find((message): message is Extract<Message, { type: "image" }> => message.type === "image");
       const cardMsg: Message =
         mode === "identify_dut"
           ? {
@@ -626,7 +650,10 @@ export default function Home() {
               id: makeId(),
               role: "assistant",
               type: "graph_result",
-              result: mode === "interpret_graph" ? mockGraphResult : mockDcBiasResult,
+              result: {
+                ...(mode === "interpret_graph" ? mockGraphResult : mockDcBiasResult),
+                sourceImageUrl: lastImage?.imageUrl ?? (mode === "interpret_graph" ? mockGraphResult.sourceImageUrl : mockDcBiasResult.sourceImageUrl)
+              },
               createdAt: new Date().toISOString()
             };
 

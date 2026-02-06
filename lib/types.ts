@@ -83,6 +83,20 @@ export type GraphResult = {
     why: string;
   }>;
   recommendedMeasurementBand: string;
+  /** 原始圖像（用於標註或預覽） */
+  sourceImageUrl?: string;
+  /** DC Bias 解析資訊（飽和點計算用） */
+  dcBiasMeta?: {
+    l0: { value: number; unit: string };
+    currentRange?: { min: number; max: number; unit: string };
+    axisRange?: {
+      current: { min: number; max: number; unit: string };
+      inductance: { min: number; max: number; unit: string };
+    };
+    plotAreaPct?: { left: number; top: number; right: number; bottom: number };
+    dropPoints: Array<{ percent: number; current: number }>;
+    curvePoints?: Array<{ current: number; inductance: number }>;
+  };
   /** 等效電路 Equivalent circuit */
   suggestedEquivalentCircuit?: string;
 };
