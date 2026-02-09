@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnalysisMode, Message } from "@/lib/types";
+import { AnalysisMode, LocalizedString, Message } from "@/lib/types";
 import { cx, formatTime } from "@/lib/utils";
 import { DUTResultCard } from "@/components/DUTResultCard";
 import { GraphResultCard } from "@/components/GraphResultCard";
@@ -28,6 +28,12 @@ const MODE_COLOR: Record<AnalysisMode, string> = {
   identify_dut: "bg-blue-600",
   interpret_graph: "bg-violet-600",
   dc_bias_saturation: "bg-amber-600"
+};
+
+const resolveText = (value: string | LocalizedString, locale: "zh" | "en") => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value[locale] ?? value.en ?? value.zh ?? "";
 };
 
 export function MessageItem({
@@ -76,7 +82,7 @@ export function MessageItem({
                     isUser ? "text-white/90 dark:text-slate-900" : "text-slate-800 dark:text-slate-100"
                   )}
                 >
-                  {message.text}
+                  {resolveText(message.text, locale)}
                 </p>
               )}
 
@@ -114,7 +120,7 @@ export function MessageItem({
               {message.type === "dut_result" && (
                 <div className="mt-2">
                   <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-400">{labels.result}</div>
-                  <DUTResultCard result={message.result} onInsertSummary={onInsertSummary} />
+                  <DUTResultCard result={message.result} locale={locale} onInsertSummary={onInsertSummary} />
                 </div>
               )}
 

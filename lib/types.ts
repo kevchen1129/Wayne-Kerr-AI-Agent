@@ -26,23 +26,27 @@ export type ToolOption = {
 export type DUTResult = {
   componentType: "Inductor" | "Capacitor" | "Resistor" | "Unknown";
   confidence: number;
-  packageGuess?: string;
+  packageGuess?: LocalizedString;
   estimatedWorkingRange?: {
-    recommendedFrequencyBand: string;
-    srFEstimate?: string;
-    notes?: string;
+    recommendedFrequencyBand: LocalizedString;
+    srFEstimate?: LocalizedString;
+    notes?: LocalizedString;
   };
   recommendedSetup: {
     mode: "Series" | "Parallel";
-    primaryParams: string[];
-    testFrequencySuggestions: Array<{ label: string; value: string; rationale?: string }>;
-    testLevel?: string;
-    dcBias?: string;
-    fixture?: string;
-    compensation?: string[];
+    primaryParams: LocalizedString[];
+    testFrequencySuggestions: Array<{
+      label: LocalizedString;
+      value: LocalizedString;
+      rationale?: LocalizedString;
+    }>;
+    testLevel?: LocalizedString;
+    dcBias?: LocalizedString;
+    fixture?: LocalizedString;
+    compensation?: LocalizedString[];
   };
-  whatToConfirm: string[];
-  warnings?: string[];
+  whatToConfirm: LocalizedString[];
+  warnings?: LocalizedString[];
 };
 
 // --- Graph (Sweep) result ---
@@ -140,7 +144,13 @@ export type Message =
       mode: AnalysisMode;
       createdAt: string;
     }
-  | { id: string; role: "assistant"; type: "text"; text: string; createdAt: string }
+  | {
+      id: string;
+      role: "assistant";
+      type: "text";
+      text: LocalizedString;
+      createdAt: string;
+    }
   | {
       id: string;
       role: "assistant";

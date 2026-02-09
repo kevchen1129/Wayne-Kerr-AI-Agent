@@ -118,34 +118,79 @@ const dcBiasGraphImage = `${assetBasePath}/dc-bias-real.png`;
 const mockDUTResult: DUTResult = {
   componentType: "Inductor",
   confidence: 0.83,
-  packageGuess: "TDK SMD power inductor (marking detected, 4.7–10 µH class)",
+  packageGuess: {
+    zh: "TDK SMD 電感（辨識到標記，推估 4.7–10 µH 等級）",
+    en: "TDK SMD power inductor (marking detected, 4.7–10 µH class)"
+  },
   estimatedWorkingRange: {
-    recommendedFrequencyBand: "20 kHz – 300 kHz (daily), validate to 1 MHz",
-    srFEstimate: "~15–40 MHz (estimate from package class)",
-    notes:
-      "Daily working range: 20–300 kHz, 0.2–0.5 Vrms, ambient 25°C. Part number/marking can refine SRF & DCR; confirm with a sweep."
+    recommendedFrequencyBand: {
+      zh: "20 kHz – 300 kHz（日常），可延伸驗證至 1 MHz",
+      en: "20 kHz – 300 kHz (daily), validate to 1 MHz"
+    },
+    srFEstimate: {
+      zh: "約 15–40 MHz（依封裝推估）",
+      en: "~15–40 MHz (estimate from package class)"
+    },
+    notes: {
+      zh:
+        "日常工作範圍：20–300 kHz、0.2–0.5 Vrms、環境 25°C。料號或標記可進一步精煉 SRF 與 DCR，建議以掃頻確認。",
+      en:
+        "Daily working range: 20–300 kHz, 0.2–0.5 Vrms, ambient 25°C. Part number/marking can refine SRF & DCR; confirm with a sweep."
+    }
   },
   recommendedSetup: {
     mode: "Series",
-    primaryParams: ["Ls-Rs", "Q", "|Z|"],
-    testFrequencySuggestions: [
-      { label: "Primary", value: "100 kHz", rationale: "typical power conversion" },
-      { label: "Sweep", value: "10 kHz – 2 MHz", rationale: "capture SRF and L(f)" },
-      { label: "DC bias", value: "0 A → rated current step", rationale: "saturation check" }
+    primaryParams: [
+      { zh: "Ls-Rs", en: "Ls-Rs" },
+      { zh: "Q", en: "Q" },
+      { zh: "|Z|", en: "|Z|" }
     ],
-    testLevel: "0.2–0.5 Vrms (reduce if heating/saturation observed)",
-    dcBias: "Start 0 A, sweep to rated current if applicable",
-    fixture: "4-terminal pair / Kelvin clip or SMD fixture",
-    compensation: ["OPEN", "SHORT", "LOAD (optional)"]
+    testFrequencySuggestions: [
+      {
+        label: { zh: "主測", en: "Primary" },
+        value: { zh: "100 kHz", en: "100 kHz" },
+        rationale: { zh: "典型電源轉換", en: "typical power conversion" }
+      },
+      {
+        label: { zh: "掃頻", en: "Sweep" },
+        value: { zh: "10 kHz – 2 MHz", en: "10 kHz – 2 MHz" },
+        rationale: { zh: "捕捉 SRF 與 L(f)", en: "capture SRF and L(f)" }
+      },
+      {
+        label: { zh: "DC bias", en: "DC bias" },
+        value: { zh: "0 A → 額定電流", en: "0 A → rated current step" },
+        rationale: { zh: "飽和檢查", en: "saturation check" }
+      }
+    ],
+    testLevel: {
+      zh: "0.2–0.5 Vrms（若升溫/飽和則降低）",
+      en: "0.2–0.5 Vrms (reduce if heating/saturation observed)"
+    },
+    dcBias: {
+      zh: "0 A 起掃，視規格拉至額定電流",
+      en: "Start 0 A, sweep to rated current if applicable"
+    },
+    fixture: {
+      zh: "四端子 / Kelvin 夾具或 SMD fixture",
+      en: "4-terminal pair / Kelvin clip or SMD fixture"
+    },
+    compensation: [
+      { zh: "OPEN", en: "OPEN" },
+      { zh: "SHORT", en: "SHORT" },
+      { zh: "LOAD（選用）", en: "LOAD (optional)" }
+    ]
   },
   whatToConfirm: [
-    "Photo marking (e.g. 4R7) or exact TDK part number to confirm SRF and DCR?",
-    "Rated current and max operating temperature?",
-    "Target application frequency band?"
+    {
+      zh: "可辨識標記（如 4R7）或確切 TDK 料號，以確認 SRF 與 DCR？",
+      en: "Photo marking (e.g. 4R7) or exact TDK part number to confirm SRF and DCR?"
+    },
+    { zh: "額定電流與最高工作溫度？", en: "Rated current and max operating temperature?" },
+    { zh: "目標應用頻段？", en: "Target application frequency band?" }
   ],
   warnings: [
-    "Cannot infer rated current from photo alone.",
-    "SRF estimate is visual only; measure to confirm."
+    { zh: "僅憑照片無法推估額定電流。", en: "Cannot infer rated current from photo alone." },
+    { zh: "SRF 為視覺估計，請量測確認。", en: "SRF estimate is visual only; measure to confirm." }
   ]
 };
 
@@ -320,7 +365,10 @@ const initialMessages: Record<string, Message[]> = {
       id: "msg-dut-2",
       role: "assistant",
       type: "text",
-      text: "辨識為 TDK 類型電感。可由照片或上方編號對照資料表，已帶出量測模式、頻率與日常 working range。",
+      text: {
+        zh: "辨識為 TDK 類型電感。可由照片或上方編號對照資料表，已帶出量測模式、頻率與日常 working range。",
+        en: "Identified as a TDK inductor. Use the photo/marking to match the datasheet; recommended mode, frequency, and daily working range are included."
+      },
       createdAt: now
     },
     {
@@ -345,7 +393,10 @@ const initialMessages: Record<string, Message[]> = {
       id: "msg-eq-2",
       role: "assistant",
       type: "text",
-      text: "掃頻圖適合等效電路分析；預設 3 元件模型，若多共振可升級 4–5 元件。",
+      text: {
+        zh: "掃頻圖適合等效電路分析；預設 3 元件模型，若多共振可升級 4–5 元件。",
+        en: "The sweep supports equivalent‑circuit modeling; default 3‑element model, upgrade to 4–5 for multi‑resonance."
+      },
       createdAt: now
     },
     {
@@ -370,7 +421,10 @@ const initialMessages: Record<string, Message[]> = {
       id: "msg-res-2",
       role: "assistant",
       type: "text",
-      text: "已分析 DC bias 曲線，計算 L 下跌 20% 的飽和點與電流值。",
+      text: {
+        zh: "已分析 DC bias 曲線，計算 L 下跌 20% 的飽和點與電流值。",
+        en: "DC bias curve analyzed; the 20% inductance drop point and current value are computed."
+      },
       createdAt: now
     },
     {
@@ -626,10 +680,19 @@ export default function Home() {
     const threadId = activeThreadId;
 
     window.setTimeout(() => {
-      const textByMode: Record<AnalysisMode, string> = {
-        identify_dut: "已辨識元件類型，可由照片/編號對照資料表，並提供建議量測設定與日常 working range。",
-        interpret_graph: "此掃頻圖適合等效電路分析，已整理 2/3/4 元件模型建議。",
-        dc_bias_saturation: "此 DC bias 掃描可用於飽和分析，已標示 L 下跌 20% 的電流點。"
+      const textByMode: Record<AnalysisMode, { zh: string; en: string }> = {
+        identify_dut: {
+          zh: "已辨識元件類型，可由照片/編號對照資料表，並提供建議量測設定與日常 working range。",
+          en: "Component identified. Use the photo/marking to match the datasheet; suggested setup and daily working range are provided."
+        },
+        interpret_graph: {
+          zh: "此掃頻圖適合等效電路分析，已整理 3/4/5 元件模型建議。",
+          en: "This sweep supports equivalent‑circuit modeling; suggested 3–5 element candidates are provided."
+        },
+        dc_bias_saturation: {
+          zh: "此 DC bias 掃描可用於飽和分析，已標示 L 下跌 20% 的電流點。",
+          en: "DC bias sweep indicates saturation; the 20% inductance drop point is marked."
+        }
       };
 
       const textMsg: Message = {

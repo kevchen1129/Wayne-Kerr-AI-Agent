@@ -94,26 +94,31 @@ export function Sidebar({
   };
 
   const stringifyMessage = (message: Message) => {
-    if (message.type === "text") return message.text;
+    if (message.type === "text") return resolveLocalized(message.text);
     if (message.type === "image") return message.caption ?? "";
     if (message.type === "dut_result") {
       const { componentType, packageGuess, estimatedWorkingRange, recommendedSetup, whatToConfirm, warnings } =
         message.result;
       return [
         componentType,
-        packageGuess,
-        estimatedWorkingRange?.recommendedFrequencyBand,
-        estimatedWorkingRange?.srFEstimate,
-        estimatedWorkingRange?.notes,
+        resolveLocalized(packageGuess),
+        resolveLocalized(estimatedWorkingRange?.recommendedFrequencyBand),
+        resolveLocalized(estimatedWorkingRange?.srFEstimate),
+        resolveLocalized(estimatedWorkingRange?.notes),
         recommendedSetup.mode,
-        recommendedSetup.primaryParams?.join(" "),
-        recommendedSetup.testFrequencySuggestions?.map((item) => `${item.label} ${item.value} ${item.rationale ?? ""}`).join(" "),
-        recommendedSetup.testLevel,
-        recommendedSetup.dcBias,
-        recommendedSetup.fixture,
-        recommendedSetup.compensation?.join(" "),
-        whatToConfirm?.join(" "),
-        warnings?.join(" ")
+        recommendedSetup.primaryParams?.map((item) => resolveLocalized(item)).join(" "),
+        recommendedSetup.testFrequencySuggestions
+          ?.map(
+            (item) =>
+              `${resolveLocalized(item.label)} ${resolveLocalized(item.value)} ${resolveLocalized(item.rationale)}`.trim()
+          )
+          .join(" "),
+        resolveLocalized(recommendedSetup.testLevel),
+        resolveLocalized(recommendedSetup.dcBias),
+        resolveLocalized(recommendedSetup.fixture),
+        recommendedSetup.compensation?.map((item) => resolveLocalized(item)).join(" "),
+        whatToConfirm?.map((item) => resolveLocalized(item)).join(" "),
+        warnings?.map((item) => resolveLocalized(item)).join(" ")
       ]
         .filter(Boolean)
         .join(" ");
