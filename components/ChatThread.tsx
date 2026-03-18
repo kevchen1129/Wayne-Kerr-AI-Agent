@@ -49,12 +49,15 @@ type ChatThreadProps = {
   onExport: () => void;
   onClear: () => void;
   onInsertSummary: (summary: string) => void;
+  onInsertPrompt: (prompt: string) => void;
   onImageClick: (src: string) => void;
   draft: ComposerDraft;
   onTextChange: (value: string) => void;
   onRemoveImage: (id: string) => void;
   onImagesSelected: (files: FileList) => void;
   onSend: () => void;
+  validationError?: string | null;
+  canSend?: boolean;
 };
 
 export function ChatThread({
@@ -75,12 +78,15 @@ export function ChatThread({
   onExport,
   onClear,
   onInsertSummary,
+  onInsertPrompt,
   onImageClick,
   draft,
   onTextChange,
   onRemoveImage,
   onImagesSelected,
-  onSend
+  onSend,
+  validationError,
+  canSend
 }: ChatThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isEmpty = messages.length === 0 && !isTyping;
@@ -151,6 +157,7 @@ export function ChatThread({
               locale={locale}
               onImageClick={onImageClick}
               onInsertSummary={onInsertSummary}
+              onInsertPrompt={onInsertPrompt}
               labels={labels}
             />
           ))
@@ -166,6 +173,8 @@ export function ChatThread({
         onRemoveImage={onRemoveImage}
         onImagesSelected={onImagesSelected}
         isBusy={isTyping}
+        validationError={validationError}
+        canSendOverride={canSend}
       />
     </section>
   );

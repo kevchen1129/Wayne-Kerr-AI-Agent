@@ -47,6 +47,8 @@ type ComposerProps = {
   onRemoveImage: (id: string) => void;
   onImagesSelected: (files: FileList) => void;
   isBusy: boolean;
+  validationError?: string | null;
+  canSendOverride?: boolean;
 };
 
 export function Composer({
@@ -57,7 +59,9 @@ export function Composer({
   onSend,
   onRemoveImage,
   onImagesSelected,
-  isBusy
+  isBusy,
+  validationError,
+  canSendOverride
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +82,8 @@ export function Composer({
     event.target.value = "";
   };
 
-  const canSend = draft.text.trim().length > 0 || draft.images.length > 0;
+  const hasContent = draft.text.trim().length > 0 || draft.images.length > 0;
+  const canSend = canSendOverride ?? (hasContent && !validationError);
 
   return (
     <div className="border-t border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_-16px_30px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
@@ -101,6 +106,11 @@ export function Composer({
       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
         {MODE_HINTS[mode][locale]}
       </p>
+      {validationError && (
+        <div className="mb-3 rounded-2xl border border-rose-200/70 bg-rose-50/80 px-3 py-2 text-xs text-rose-600 dark:border-rose-600/40 dark:bg-rose-900/20 dark:text-rose-300">
+          {validationError}
+        </div>
+      )}
 
       {draft.images.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">

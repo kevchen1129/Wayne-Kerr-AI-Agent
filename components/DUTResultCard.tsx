@@ -7,6 +7,7 @@ import { cx } from "@/lib/utils";
 type DUTResultCardProps = {
   result: DUTResult;
   onInsertSummary: (summary: string) => void;
+  onInsertPrompt: (prompt: string) => void;
   locale: "zh" | "en";
 };
 
@@ -48,7 +49,7 @@ function buildSummary(result: DUTResult, locale: "zh" | "en"): string {
   return `${base}. ${label}`;
 }
 
-export function DUTResultCard({ result, onInsertSummary, locale }: DUTResultCardProps) {
+export function DUTResultCard({ result, onInsertSummary, onInsertPrompt, locale }: DUTResultCardProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>("working_range");
   const [copied, setCopied] = useState<"json" | "summary" | null>(null);
 
@@ -228,14 +229,24 @@ export function DUTResultCard({ result, onInsertSummary, locale }: DUTResultCard
 
         {activeSection === "confirm" && (
           <ul className="space-y-2">
-            {result.whatToConfirm.map((q, i) => (
-              <li
-                key={i}
-                className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-950/60"
-              >
-                {resolveText(q, locale)}
-              </li>
-            ))}
+            {result.whatToConfirm.map((q, i) => {
+              const question = resolveText(q, locale);
+              return (
+                <li
+                  key={i}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-950/60"
+                >
+                  <span className="text-slate-700 dark:text-slate-200">{question}</span>
+                  <button
+                    type="button"
+                    onClick={() => onInsertPrompt(question)}
+                    className="rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    {locale === "zh" ? "填入輸入框" : "Fill prompt"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
 

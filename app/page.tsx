@@ -21,6 +21,59 @@ const makeId = () =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
 
+const MAX_IMAGE_DIM = 1600;
+const JPEG_QUALITY = 0.85;
+const CROP_MARGINS = { top: 0.18, right: 0.02, bottom: 0.16, left: 0.04 };
+
+const fileToDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
+
+const fileToCompressedJpeg = async (file: File) => {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Failed to load image."));
+      img.src = objectUrl;
+    });
+
+    const scale = Math.min(
+      1,
+      MAX_IMAGE_DIM / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height)
+    );
+    const rawWidth = image.naturalWidth || image.width;
+    const rawHeight = image.naturalHeight || image.height;
+    const width = Math.max(1, Math.round(rawWidth * scale));
+    const height = Math.max(1, Math.round(rawHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const cropX = Math.round(width * CROP_MARGINS.left);
+    const cropY = Math.round(height * CROP_MARGINS.top);
+    const cropW = Math.max(1, Math.round(width * (1 - CROP_MARGINS.left - CROP_MARGINS.right)));
+    const cropH = Math.max(1, Math.round(height * (1 - CROP_MARGINS.top - CROP_MARGINS.bottom)));
+    const cropCanvas = document.createElement("canvas");
+    cropCanvas.width = cropW;
+    cropCanvas.height = cropH;
+    const cropCtx = cropCanvas.getContext("2d");
+    if (!cropCtx) throw new Error("Canvas not supported.");
+    cropCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    return cropCanvas.toDataURL("image/jpeg", JPEG_QUALITY);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+};
+
 const TOOL_DEFS: Array<{
   id: AnalysisMode;
   title: { zh: string; en: string };
@@ -58,7 +111,7 @@ const UI_TEXT = {
     newChat: "新對話",
     recentChats: "最近對話",
     updated: "更新",
-    prototypeNote: "目前為 UI 原型；之後可將 mock `sendMessage()` 替換成 Vision API 呼叫。",
+    prototypeNote: "已接 Grok API，影像會上傳到伺服器進行分析。",
     searchChats: "搜尋對話",
     noResults: "找不到相符的對話",
     activeThread: "目前對話",
@@ -84,7 +137,7 @@ const UI_TEXT = {
     newChat: "New chat",
     recentChats: "Recent chats",
     updated: "Updated",
-    prototypeNote: "Prototype UI only. Replace the mock `sendMessage()` later with your Vision API call.",
+    prototypeNote: "Grok API enabled. Images are uploaded to the server for analysis.",
     searchChats: "Search chats",
     noResults: "No chats found",
     activeThread: "Active thread",
@@ -198,51 +251,58 @@ const mockDUTResult: DUTResult = {
 const mockGraphResult: GraphResult = {
   graphTypeGuess: "Equivalent Circuit Recommendation (for modeling use)",
   title: {
-    zh: "等效電路建議（工程版）",
-    en: "Equivalent Circuit Recommendation (for modeling use)"
+    zh: "核心提取資訊（從掃頻圖）",
+    en: "Core Extracted Info (from sweep)"
   },
   confidence: 0.84,
   resonanceFrequency: "~6.8 MHz",
   summaryCards: [
     {
-      label: { zh: "建議模型", en: "Suggested model" },
+      label: { zh: "等效電路", en: "Equivalent circuit" },
       value: { zh: "Series Ls–Rs + Cp", en: "Series Ls–Rs + Cp" },
       tone: "info"
     },
     {
-      label: { zh: "有效擬合頻段", en: "Valid modeling band" },
-      value: { zh: "100 kHz – 5 MHz", en: "100 kHz – 5 MHz" },
+      label: { zh: "標稱電感 L₀", en: "Nominal inductance L₀" },
+      value: { zh: "≈993 nH", en: "≈993 nH" },
       tone: "default"
     },
     {
-      label: { zh: "第一共振點", en: "First resonance detected" },
-      value: { zh: "~6.8 MHz", en: "~6.8 MHz" },
+      label: { zh: "直流電阻 DCR", en: "DC resistance DCR" },
+      value: { zh: "≈21 mΩ", en: "≈21 mΩ" },
       tone: "default"
     },
     {
-      label: { zh: "擬合規則", en: "Fitting rule" },
-      value: { zh: "避免使用共振以上資料", en: "Avoid data above resonance" },
+      label: { zh: "寄生電容 Cp", en: "Parasitic capacitance Cp" },
+      value: { zh: "≈450–500 pF", en: "≈450–500 pF" },
+      tone: "default"
+    },
+    {
+      label: { zh: "自諧振頻率 SRF", en: "Self‑resonant frequency SRF" },
+      value: { zh: "≈6.8 MHz", en: "≈6.8 MHz" },
       tone: "warning"
     },
     {
-      label: { zh: "適用範圍", en: "Suitable for" },
-      value: {
-        zh: "低 MHz 功率設計與紋波估算",
-        en: "Low‑MHz power design & ripple estimation"
-      },
-      tone: "default"
+      label: { zh: "品質因子 Q", en: "Quality factor Q" },
+      value: { zh: "低頻 ≈300；1 MHz ≈17", en: "Low‑freq ≈300; 1 MHz ≈17" },
+      tone: "info"
     },
     {
-      label: { zh: "高頻/多共振", en: "High‑frequency / multi‑resonance" },
-      value: { zh: "建議改用高階模型", en: "Consider higher‑order model" },
+      label: { zh: "趨膚效應強度", en: "Skin effect intensity" },
+      value: { zh: "Rs 上升 ≈15–20 倍", en: "Rs rises ≈15–20×" },
       tone: "warning"
+    },
+    {
+      label: { zh: "推薦工作頻段", en: "Recommended band" },
+      value: { zh: "<1.4 MHz (SRF/5)", en: "<1.4 MHz (SRF/5)" },
+      tone: "info"
     }
   ],
   summaryText: {
     zh:
-      "此頻率掃描適合做等效電路擬合。預設使用 3 元件 Series Ls–Rs + Cp，擬合頻段建議限制在 100 kHz – 5 MHz。共振以上的數據不利於穩定擬合；若出現多重共振或高頻寄生效應，建議升級 4–5 元件模型。",
+      "此元件適合中低頻電源 choke 或音頻濾波應用（高 Q 區效率佳），但 SRF 僅 6.8 MHz 且高頻 Rs 上升明顯，建議工作頻率控制在 1.4 MHz 以下以維持電感穩定；若需更高頻或更低損耗，可改用 Litz 線減少趨膚效應、降低匝數或加大間距來壓低寄生電容 Cp。下一步建議掃頻至 10 MHz 精確確認 SRF，並計算高頻發熱（I²Rs）評估是否需加散熱；模擬時可直接套用 SPICE 模型（L=993 nH, Rdc=21 mΩ, Cp=480 pF）。若應用需求超過此規格，考慮更換 Murata 或 TDK 等高 SRF 電感。",
     en:
-      "Frequency sweep suggests a 3‑element Series Ls–Rs + Cp model. Fit within 100 kHz – 5 MHz and avoid data above the first resonance. For multi‑resonance or high‑frequency parasitics, consider a 4–5 element model."
+      "Suitable for low‑to‑mid frequency power chokes or audio filtering where high‑Q is beneficial. SRF is only 6.8 MHz and Rs rises sharply at high frequency, so keep the operating band below 1.4 MHz for inductance stability. For higher‑frequency or lower loss, consider Litz wire to reduce skin effect, fewer turns, or larger spacing to lower Cp. Next, sweep to 10 MHz to confirm SRF and estimate high‑frequency I²Rs heating to decide on cooling. For simulation, use a SPICE model (L=993 nH, Rdc=21 mΩ, Cp=480 pF). If requirements exceed this, consider higher‑SRF inductors such as Murata or TDK."
   },
   detectedFeatures: [
     { feature: "Q-peak", frequency: "~4.2 MHz", notes: "usable band" },
@@ -453,6 +513,20 @@ export default function Home() {
   const [typingByThread, setTypingByThread] = useState<Record<string, boolean>>({});
   const [activeImage, setActiveImage] = useState<string | null>(null);
 
+  const activeThread = threads.find((t) => t.id === activeThreadId);
+  const validation = useMemo(() => {
+    const text = draft.text.trim();
+    const hasText = text.length > 0;
+    const hasImage = draft.images.length > 0;
+    const mode = activeThread?.mode ?? draft.mode;
+
+    if (!hasText && !hasImage) {
+      return { ok: false, error: null };
+    }
+
+    return { ok: true, error: null };
+  }, [draft, activeThread?.mode, locale]);
+
   const toolOptions: ToolOption[] = useMemo(
     () =>
       TOOL_DEFS.map((tool) => ({
@@ -467,13 +541,13 @@ export default function Home() {
     () => messagesByThread[activeThreadId] ?? [],
     [messagesByThread, activeThreadId]
   );
-  const activeThread = threads.find((t) => t.id === activeThreadId);
   const activeToolId = activeThread?.mode ?? "identify_dut";
   const activeTool =
     toolOptions.find((tool) => tool.id === activeToolId) ?? toolOptions[0];
   const labels = UI_TEXT[locale];
   const localeToggleLabel = locale === "zh" ? "EN" : "中文";
   const newChatTitle = locale === "zh" ? "新對話" : "New chat";
+  const canSend = (draft.text.trim().length > 0 || draft.images.length > 0) && validation.ok;
   const brand = {
     name: "WK Insight",
     subtitle: locale === "zh" ? "精密量測智慧助理" : "Precision Measurement Intelligence",
@@ -638,12 +712,15 @@ export default function Home() {
     });
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (typingByThread[activeThreadId]) return;
+    if (!validation.ok) return;
     const text = draft.text.trim();
     if (!text && draft.images.length === 0) return;
 
     const nowStamp = new Date().toISOString();
+    const lastImageUrl = draft.images[draft.images.length - 1]?.url;
+    const hasImage = draft.images.length > 0;
     const newUserMessages: Message[] = [];
     const mode: AnalysisMode = activeThread?.mode ?? draft.mode;
 
@@ -678,67 +755,116 @@ export default function Home() {
     setTypingByThread((prev) => ({ ...prev, [activeThreadId]: true }));
 
     const threadId = activeThreadId;
+    try {
+      const imagePayload = await Promise.all(
+        draft.images.map(async (img) => {
+          if (!img.file) return null;
+          try {
+            return await fileToCompressedJpeg(img.file);
+          } catch (error) {
+            console.warn("Image compress failed, fallback to raw data URL.", error);
+            return await fileToDataUrl(img.file);
+          }
+        })
+      );
 
-    window.setTimeout(() => {
-      const textByMode: Record<AnalysisMode, { zh: string; en: string }> = {
-        identify_dut: {
-          zh: "已辨識元件類型，可由照片/編號對照資料表，並提供建議量測設定與日常 working range。",
-          en: "Component identified. Use the photo/marking to match the datasheet; suggested setup and daily working range are provided."
-        },
-        interpret_graph: {
-          zh: "此掃頻圖適合等效電路分析，已整理 3/4/5 元件模型建議。",
-          en: "This sweep supports equivalent‑circuit modeling; suggested 3–5 element candidates are provided."
-        },
-        dc_bias_saturation: {
-          zh: "此 DC bias 掃描可用於飽和分析，已標示 L 下跌 20% 的電流點。",
-          en: "DC bias sweep indicates saturation; the 20% inductance drop point is marked."
+      const response = await fetch("/api/grok", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          images: imagePayload.filter((item): item is string => Boolean(item)),
+          mode,
+          locale,
+          textOnly: !hasImage
+        })
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(errorPayload?.error || `Request failed (${response.status}).`);
+      }
+
+      const payload = (await response.json()) as {
+        text?: string;
+        result?: Record<string, unknown>;
+      };
+
+      const nextMessages: Message[] = [];
+      if (hasImage && payload.result && typeof payload.result === "object") {
+        const resultType = String(payload.result.type || "");
+        if (resultType === "dut_result") {
+          nextMessages.push({
+            id: makeId(),
+            role: "assistant",
+            type: "dut_result",
+            result: payload.result as DUTResult,
+            createdAt: new Date().toISOString()
+          });
+        } else if (resultType === "graph_result") {
+          nextMessages.push({
+            id: makeId(),
+            role: "assistant",
+            type: "graph_result",
+            result: {
+              ...(payload.result as GraphResult),
+              sourceImageUrl: (payload.result as GraphResult).sourceImageUrl || lastImageUrl
+            },
+            createdAt: new Date().toISOString()
+          });
         }
-      };
+      }
 
-      const textMsg: Message = {
-        id: makeId(),
-        role: "assistant",
-        type: "text",
-        text: textByMode[mode],
-        createdAt: new Date().toISOString()
-      };
-
-      const lastImage = [...newUserMessages]
-        .reverse()
-        .find((message): message is Extract<Message, { type: "image" }> => message.type === "image");
-      const cardMsg: Message =
-        mode === "identify_dut"
-          ? {
-              id: makeId(),
-              role: "assistant",
-              type: "dut_result",
-              result: mockDUTResult,
-              createdAt: new Date().toISOString()
-            }
-          : {
-              id: makeId(),
-              role: "assistant",
-              type: "graph_result",
-              result: {
-                ...(mode === "interpret_graph" ? mockGraphResult : mockDcBiasResult),
-                sourceImageUrl: lastImage?.imageUrl ?? (mode === "interpret_graph" ? mockGraphResult.sourceImageUrl : mockDcBiasResult.sourceImageUrl)
-              },
-              createdAt: new Date().toISOString()
-            };
+      if (nextMessages.length === 0) {
+        const assistantText =
+          payload.text?.trim() ||
+          (locale === "zh" ? "沒有收到回覆內容。" : "No response text returned.");
+        nextMessages.push({
+          id: makeId(),
+          role: "assistant",
+          type: "text",
+          text: assistantText,
+          createdAt: new Date().toISOString()
+        });
+      }
 
       setMessagesByThread((prev) => {
         if (!prev[threadId]) return prev;
-        return { ...prev, [threadId]: [...prev[threadId], textMsg, cardMsg] };
+        return { ...prev, [threadId]: [...prev[threadId], ...nextMessages] };
       });
-      setTypingByThread((prev) => ({ ...prev, [threadId]: false }));
       updateThreadMeta(threadId);
-    }, 800);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const errorText =
+        locale === "zh" ? `API 呼叫失敗：${message}` : `API request failed: ${message}`;
+      const errorMsg: Message = {
+        id: makeId(),
+        role: "assistant",
+        type: "text",
+        text: errorText,
+        createdAt: new Date().toISOString()
+      };
+      setMessagesByThread((prev) => {
+        if (!prev[threadId]) return prev;
+        return { ...prev, [threadId]: [...prev[threadId], errorMsg] };
+      });
+      updateThreadMeta(threadId);
+    } finally {
+      setTypingByThread((prev) => ({ ...prev, [threadId]: false }));
+    }
   };
 
   const handleInsertSummary = (summary: string) => {
     setDraft((prev) => ({
       ...prev,
       text: prev.text ? `${prev.text}\n${summary}` : summary
+    }));
+  };
+
+  const handleInsertPrompt = (prompt: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      text: prev.text ? `${prev.text}\n${prompt}` : prompt
     }));
   };
 
@@ -815,12 +941,15 @@ export default function Home() {
           onExport={handleExport}
           onClear={handleClear}
           onInsertSummary={handleInsertSummary}
+          onInsertPrompt={handleInsertPrompt}
           onImageClick={(src) => setActiveImage(src)}
           draft={draft}
           onTextChange={(value) => setDraft((prev) => ({ ...prev, text: value }))}
           onRemoveImage={handleRemoveImage}
           onImagesSelected={handleImagesSelected}
           onSend={handleSend}
+          validationError={validation.error}
+          canSend={canSend}
         />
         {activeImage && <ImageModal src={activeImage} onClose={() => setActiveImage(null)} />}
       </ChatLayout>

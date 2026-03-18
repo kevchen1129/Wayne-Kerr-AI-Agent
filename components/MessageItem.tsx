@@ -10,6 +10,7 @@ type MessageItemProps = {
   message: Message;
   onImageClick: (src: string) => void;
   onInsertSummary: (summary: string) => void;
+  onInsertPrompt: (prompt: string) => void;
   locale: "zh" | "en";
   labels: {
     user: string;
@@ -40,6 +41,7 @@ export function MessageItem({
   message,
   onImageClick,
   onInsertSummary,
+  onInsertPrompt,
   locale,
   labels
 }: MessageItemProps) {
@@ -59,15 +61,15 @@ export function MessageItem({
             className={cx(
               showFrame &&
                 "rounded-3xl border border-slate-200/70 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70",
-              isUser && showFrame && "border-slate-900/80 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+              isUser &&
+                showFrame &&
+                "border-slate-300 bg-white text-slate-900 dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
             )}
           >
             <div
               className={cx(
                 "flex items-center justify-between text-[10px] uppercase tracking-[0.25em]",
-                isUser
-                  ? "text-white/70 dark:text-slate-600"
-                  : "text-slate-400 dark:text-slate-500"
+                isUser ? "text-slate-400 dark:text-slate-600" : "text-slate-400 dark:text-slate-500"
               )}
             >
               <span>{isUser ? labels.user : labels.assistant}</span>
@@ -79,7 +81,7 @@ export function MessageItem({
                 <p
                   className={cx(
                     "whitespace-pre-wrap text-sm leading-relaxed",
-                    isUser ? "text-white/90 dark:text-slate-900" : "text-slate-800 dark:text-slate-100"
+                    isUser ? "text-slate-900 dark:text-slate-900" : "text-slate-800 dark:text-slate-100"
                   )}
                 >
                   {resolveText(message.text, locale)}
@@ -120,7 +122,12 @@ export function MessageItem({
               {message.type === "dut_result" && (
                 <div className="mt-2">
                   <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-400">{labels.result}</div>
-                  <DUTResultCard result={message.result} locale={locale} onInsertSummary={onInsertSummary} />
+                  <DUTResultCard
+                    result={message.result}
+                    locale={locale}
+                    onInsertSummary={onInsertSummary}
+                    onInsertPrompt={onInsertPrompt}
+                  />
                 </div>
               )}
 
