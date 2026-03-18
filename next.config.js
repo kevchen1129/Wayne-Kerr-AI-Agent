@@ -11,7 +11,7 @@ const basePath =
 
 const nextConfig = {
   reactStrictMode: true,
-  output: "export",
+  output: isGithubActions ? "export" : undefined,
   basePath,
   assetPrefix: basePath,
   images: { unoptimized: true },
