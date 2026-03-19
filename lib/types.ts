@@ -76,6 +76,8 @@ export type GraphResult = {
   }>;
   /** Optional long-form summary text */
   summaryText?: LocalizedString;
+  /** Optional long-form analysis text (detailed narrative) */
+  analysisText?: LocalizedString;
   detectedFeatures: Array<{
     feature: GraphDetectedFeature;
     frequency?: string;

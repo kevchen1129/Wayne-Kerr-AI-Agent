@@ -9,7 +9,10 @@ type GraphResultCardProps = {
   onInsertSummary: (summary: string) => void;
 };
 
-const resolveText = (value: GraphResult["title"] | GraphResult["summaryText"] | undefined, locale: "zh" | "en") => {
+const resolveText = (
+  value: GraphResult["title"] | GraphResult["summaryText"] | GraphResult["analysisText"] | undefined,
+  locale: "zh" | "en"
+) => {
   if (!value) return "";
   if (typeof value === "string") return value;
   return value[locale] ?? value.en ?? value.zh ?? "";
@@ -99,6 +102,7 @@ export function GraphResultCard({ result, locale, onInsertSummary }: GraphResult
   const dcBiasMeta = result.dcBiasMeta;
   const dropPoint = dcBiasMeta?.dropPoints.find((point) => point.percent === dropPercent);
   const interpretationText = resolveText(result.summaryText, locale) || "";
+  const analysisText = resolveText(result.analysisText, locale) || "";
   const extraInsights = result.interpretation ?? [];
   const testConditions = dcBiasMeta?.testConditions;
   const kneePoint = dcBiasMeta?.kneePoint;
@@ -266,6 +270,17 @@ export function GraphResultCard({ result, locale, onInsertSummary }: GraphResult
                   : "Practical Summary"}
             </div>
             <p className="mt-2 text-slate-800 dark:text-slate-100">{interpretationText}</p>
+          </div>
+        )}
+
+        {analysisText && (
+          <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+              {locale === "zh" ? "詳細分析" : "Detailed Analysis"}
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-slate-800 dark:text-slate-100">
+              {analysisText}
+            </p>
           </div>
         )}
 
