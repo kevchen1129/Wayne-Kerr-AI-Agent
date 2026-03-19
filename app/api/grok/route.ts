@@ -10,7 +10,7 @@ type GrokRequest = {
 };
 
 const BASE_URL = "https://api.x.ai/v1";
-const DEFAULT_MODEL = "grok-4-1-fast-reasoning";
+const DEFAULT_MODEL = "grok-4.20-beta-0309-reasoning";
 const TIMEOUT_MS = 180000;
 
 const SYSTEM_PROMPTS: Record<"zh" | "en", Record<AnalysisMode, string>> = {
