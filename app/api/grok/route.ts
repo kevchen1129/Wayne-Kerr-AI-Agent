@@ -306,7 +306,8 @@ export async function POST(request: Request) {
           ...historyMessages,
           { role: "user", content }
         ],
-        store: false
+        store: false,
+        temperature: 0
       }),
       signal: controller.signal
     });
@@ -322,6 +323,14 @@ export async function POST(request: Request) {
 
     const data = await response.json();
     const outputText = extractOutputText(data);
+    if (!outputText || outputText.trim().length === 0) {
+      return NextResponse.json({
+        text:
+          locale === "zh"
+            ? "模型沒有回覆內容，請再試一次。"
+            : "Model returned an empty response. Please try again."
+      });
+    }
     if (!textOnly) {
       const parsed = extractFirstJson(outputText);
     if (parsed && typeof parsed.type === "string") {

@@ -808,7 +808,7 @@ export default function Home() {
           images: imagesForApi,
           mode,
           locale,
-          textOnly: imagesForApi.length === 0,
+          textOnly: !hasImage,
           history
         })
       });
