@@ -768,26 +768,36 @@ export default function Home() {
       const imagePayload = await Promise.all(
         draft.images.map(async (img) => {
           if (!img.file) return null;
+          const original = await fileToDataUrl(img.file);
           try {
-            return await fileToCompressedJpeg(img.file);
+            const cropped = await fileToCompressedJpeg(img.file);
+            return { original, cropped };
           } catch (error) {
             console.warn("Image compress failed, fallback to raw data URL.", error);
-            return await fileToDataUrl(img.file);
+            return { original, cropped: original };
           }
         })
       );
 
-      const fallbackImage = lastImageByThread[threadId];
-      const imagesForApi =
-        imagePayload.filter((item): item is string => Boolean(item)).length > 0
-          ? imagePayload.filter((item): item is string => Boolean(item))
-          : fallbackImage
-            ? [fallbackImage]
-            : [];
+      const newImages = imagePayload
+        .filter((item): item is { original: string; cropped: string } => Boolean(item))
+        .flatMap((item) =>
+          item.cropped && item.cropped !== item.original
+            ? [item.original, item.cropped]
+            : [item.original]
+        );
 
-      if (imagePayload.length > 0 && imagesForApi.length > 0) {
-        const latest = imagesForApi[imagesForApi.length - 1]!;
-        setLastImageByThread((prev) => ({ ...prev, [threadId]: latest }));
+      const fallbackImage = lastImageByThread[threadId];
+      const imagesForApi = newImages.length > 0 ? newImages : fallbackImage ? [fallbackImage] : [];
+
+      if (imagePayload.length > 0) {
+        const latestOriginal = imagePayload
+          .filter((item): item is { original: string; cropped: string } => Boolean(item))
+          .map((item) => item.original)
+          .pop();
+        if (latestOriginal) {
+          setLastImageByThread((prev) => ({ ...prev, [threadId]: latestOriginal }));
+        }
       }
 
       const response = await fetch("/api/grok", {
