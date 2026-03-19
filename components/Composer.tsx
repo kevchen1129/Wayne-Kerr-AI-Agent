@@ -146,7 +146,6 @@ export function Composer({
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           multiple
           onChange={handleFileChange}
           className="hidden"
