@@ -7,6 +7,7 @@ type GrokRequest = {
   mode?: AnalysisMode;
   locale?: "zh" | "en";
   textOnly?: boolean;
+  history?: Array<{ role: "user" | "assistant"; text: string }>;
 };
 
 const BASE_URL = "https://api.x.ai/v1";
@@ -196,6 +197,7 @@ export async function POST(request: Request) {
   const mode: AnalysisMode = body.mode ?? "identify_dut";
   const locale: "zh" | "en" = body.locale === "en" ? "en" : "zh";
   const textOnly = Boolean(body.textOnly);
+  const history = Array.isArray(body.history) ? body.history : [];
 
   const content: Array<Record<string, string>> = [];
   if (text) {
@@ -213,6 +215,13 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
+    const historyMessages = history
+      .filter((item) => item && typeof item.text === "string")
+      .map((item) => ({
+        role: item.role,
+        content: [{ type: "input_text", text: item.text }]
+      }));
+
     const response = await fetch(`${BASE_URL}/responses`, {
       method: "POST",
       headers: {
@@ -230,6 +239,7 @@ export async function POST(request: Request) {
                 : "You are a precision measurement assistant. Answer the user's question in natural language, concise and clear."
               : `${SYSTEM_PROMPTS[locale][mode]}\nSchema:\n${SCHEMA_BY_MODE[mode]}`
           },
+          ...historyMessages,
           { role: "user", content }
         ],
         store: false

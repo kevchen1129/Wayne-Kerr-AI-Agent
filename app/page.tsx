@@ -512,6 +512,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [typingByThread, setTypingByThread] = useState<Record<string, boolean>>({});
   const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [lastImageByThread, setLastImageByThread] = useState<Record<string, string>>({});
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
   const validation = useMemo(() => {
@@ -756,6 +757,14 @@ export default function Home() {
 
     const threadId = activeThreadId;
     try {
+      const history = (messagesByThread[threadId] ?? [])
+        .filter((message) => message.type === "text")
+        .slice(-6)
+        .map((message) => ({
+          role: message.role,
+          text: typeof message.text === "string" ? message.text : message.text[locale] ?? ""
+        }));
+
       const imagePayload = await Promise.all(
         draft.images.map(async (img) => {
           if (!img.file) return null;
@@ -768,15 +777,29 @@ export default function Home() {
         })
       );
 
+      const fallbackImage = lastImageByThread[threadId];
+      const imagesForApi =
+        imagePayload.filter((item): item is string => Boolean(item)).length > 0
+          ? imagePayload.filter((item): item is string => Boolean(item))
+          : fallbackImage
+            ? [fallbackImage]
+            : [];
+
+      if (imagePayload.length > 0 && imagesForApi.length > 0) {
+        const latest = imagesForApi[imagesForApi.length - 1]!;
+        setLastImageByThread((prev) => ({ ...prev, [threadId]: latest }));
+      }
+
       const response = await fetch("/api/grok", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text,
-          images: imagePayload.filter((item): item is string => Boolean(item)),
+          images: imagesForApi,
           mode,
           locale,
-          textOnly: !hasImage
+          textOnly: imagesForApi.length === 0,
+          history
         })
       });
 
