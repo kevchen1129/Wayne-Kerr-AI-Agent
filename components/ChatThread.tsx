@@ -45,6 +45,7 @@ type ChatThreadProps = {
   onToggleLocale: () => void;
   messages: Message[];
   isTyping: boolean;
+  typingLabel: string;
   onOpenSidebar: () => void;
   onExport: () => void;
   onClear: () => void;
@@ -73,6 +74,7 @@ export function ChatThread({
   onToggleLocale,
   messages,
   isTyping,
+  typingLabel,
   onOpenSidebar,
   onExport,
   onClear,
@@ -159,7 +161,7 @@ export function ChatThread({
             />
           ))
         )}
-        {isTyping && <TypingIndicator label={labels.analyzing} />}
+        {isTyping && <TypingIndicator label={typingLabel} />}
       </div>
       <Composer
         draft={draft}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatLayout } from "@/components/ChatLayout";
 import { ChatThread } from "@/components/ChatThread";
 import { ImageModal } from "@/components/ImageModal";
@@ -157,6 +157,24 @@ const UI_TEXT = {
     result: "Result",
     user: "User",
     assistant: "Assistant"
+  }
+};
+
+const ANALYSIS_STEPS: Record<
+  AnalysisMode,
+  Record<"zh" | "en", string[]>
+> = {
+  identify_dut: {
+    zh: ["整理圖片中…", "辨識元件外觀中…", "推估量測設定中…", "整理建議摘要中…"],
+    en: ["Preparing image…", "Identifying component appearance…", "Estimating measurement setup…", "Preparing summary…"]
+  },
+  interpret_graph: {
+    zh: ["整理圖片中…", "讀取曲線與座標中…", "判斷等效電路中…", "整理分析摘要中…"],
+    en: ["Preparing image…", "Reading curves and axes…", "Inferring equivalent circuit…", "Preparing analysis summary…"]
+  },
+  dc_bias_saturation: {
+    zh: ["整理圖片中…", "讀取 DC Bias 曲線中…", "估算飽和點中…", "整理分析摘要中…"],
+    en: ["Preparing image…", "Reading DC bias curve…", "Estimating saturation point…", "Preparing analysis summary…"]
   }
 };
 
@@ -511,8 +529,10 @@ export default function Home() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [typingByThread, setTypingByThread] = useState<Record<string, boolean>>({});
+  const [typingStepByThread, setTypingStepByThread] = useState<Record<string, number>>({});
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [lastImageByThread, setLastImageByThread] = useState<Record<string, string>>({});
+  const typingTimersRef = useRef<Record<string, number>>({});
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
   const validation = useMemo(() => {
@@ -549,6 +569,13 @@ export default function Home() {
   const localeToggleLabel = locale === "zh" ? "EN" : "中文";
   const newChatTitle = locale === "zh" ? "新對話" : "New chat";
   const canSend = (draft.text.trim().length > 0 || draft.images.length > 0) && validation.ok;
+  const activeTypingLabel = useMemo(() => {
+    if (!typingByThread[activeThreadId]) return labels.analyzing;
+    const mode = activeThread?.mode ?? draft.mode;
+    const steps = ANALYSIS_STEPS[mode][locale];
+    const stepIndex = typingStepByThread[activeThreadId] ?? 0;
+    return steps[Math.min(stepIndex, steps.length - 1)] ?? labels.analyzing;
+  }, [activeThread?.mode, activeThreadId, draft.mode, labels.analyzing, locale, typingByThread, typingStepByThread]);
   const brand = {
     name: "WK Insight",
     subtitle: locale === "zh" ? "精密量測智慧助理" : "Precision Measurement Intelligence",
@@ -569,6 +596,12 @@ export default function Home() {
       )
     );
   }, [newChatTitle]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(typingTimersRef.current).forEach((timer) => window.clearInterval(timer));
+    };
+  }, []);
 
   const updateThreadMeta = (threadId: string, textSample?: string) => {
     setThreads((prev) => {
@@ -754,8 +787,21 @@ export default function Home() {
     updateThreadMeta(activeThreadId, text || activeTool.title);
     setDraft((prev) => ({ ...prev, text: "", images: [] }));
     setTypingByThread((prev) => ({ ...prev, [activeThreadId]: true }));
+    setTypingStepByThread((prev) => ({ ...prev, [activeThreadId]: 0 }));
 
     const threadId = activeThreadId;
+    const stepCount = ANALYSIS_STEPS[mode][locale].length;
+    if (typingTimersRef.current[threadId]) {
+      window.clearInterval(typingTimersRef.current[threadId]);
+    }
+    typingTimersRef.current[threadId] = window.setInterval(() => {
+      setTypingStepByThread((prev) => {
+        const current = prev[threadId] ?? 0;
+        if (current >= stepCount - 1) return prev;
+        return { ...prev, [threadId]: current + 1 };
+      });
+    }, 15000);
+
     try {
       const history = (messagesByThread[threadId] ?? [])
         .filter((message) => message.type === "text")
@@ -884,6 +930,11 @@ export default function Home() {
       updateThreadMeta(threadId);
     } finally {
       setTypingByThread((prev) => ({ ...prev, [threadId]: false }));
+      setTypingStepByThread((prev) => ({ ...prev, [threadId]: 0 }));
+      if (typingTimersRef.current[threadId]) {
+        window.clearInterval(typingTimersRef.current[threadId]);
+        delete typingTimersRef.current[threadId];
+      }
     }
   };
 
@@ -963,6 +1014,7 @@ export default function Home() {
           }}
           messages={activeMessages}
           isTyping={Boolean(typingByThread[activeThreadId])}
+          typingLabel={activeTypingLabel}
           onOpenSidebar={() => setSidebarOpen(true)}
           onExport={handleExport}
           onClear={handleClear}
