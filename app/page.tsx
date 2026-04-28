@@ -81,7 +81,7 @@ const TOOL_DEFS: Array<{
 }> = [
   {
     id: "identify_dut",
-    title: { zh: "被斷元件測量建議", en: "DUT Measurement Setup" },
+    title: { zh: "被動元件測量建議", en: "DUT Measurement Setup" },
     description: {
       zh: "辨識 R/L/C，帶出建議量測模式、頻率、電平與工作範圍。",
       en: "Identify R/L/C and suggest measurement mode, frequency, level, and working range."
@@ -404,7 +404,7 @@ const draftThreadId = "thread-new";
 
 const initialThreads: Thread[] = [
   { id: draftThreadId, title: "新對話", mode: "identify_dut", updatedAt: now, isDraft: true },
-  { id: "thread-dut", title: "被斷元件測量建議", mode: "identify_dut", updatedAt: now },
+  { id: "thread-dut", title: "被動元件測量建議", mode: "identify_dut", updatedAt: now },
   { id: "thread-eq", title: "等效電路", mode: "interpret_graph", updatedAt: now },
   { id: "thread-res", title: "DC Bias 飽和分析", mode: "dc_bias_saturation", updatedAt: now }
 ];

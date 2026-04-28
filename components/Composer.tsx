@@ -6,7 +6,7 @@ import { AnalysisMode, ComposerDraft } from "@/lib/types";
 import { cx } from "@/lib/utils";
 
 const MODE_LABELS: Record<AnalysisMode, { zh: string; en: string }> = {
-  identify_dut: { zh: "被斷元件測量建議", en: "DUT Measurement Setup" },
+  identify_dut: { zh: "被動元件測量建議", en: "DUT Measurement Setup" },
   interpret_graph: { zh: "等效電路", en: "Equivalent Circuit" },
   dc_bias_saturation: { zh: "DC Bias 飽和分析", en: "DC Bias Saturation" }
 };
