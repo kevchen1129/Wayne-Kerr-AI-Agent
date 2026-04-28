@@ -530,6 +530,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [typingByThread, setTypingByThread] = useState<Record<string, boolean>>({});
   const [typingStepByThread, setTypingStepByThread] = useState<Record<string, number>>({});
+  const [typingHasImageByThread, setTypingHasImageByThread] = useState<Record<string, boolean>>({});
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [lastImageByThread, setLastImageByThread] = useState<Record<string, string>>({});
   const typingTimersRef = useRef<Record<string, number>>({});
@@ -571,11 +572,12 @@ export default function Home() {
   const canSend = (draft.text.trim().length > 0 || draft.images.length > 0) && validation.ok;
   const activeTypingLabel = useMemo(() => {
     if (!typingByThread[activeThreadId]) return labels.analyzing;
+    if (!typingHasImageByThread[activeThreadId]) return labels.analyzing;
     const mode = activeThread?.mode ?? draft.mode;
     const steps = ANALYSIS_STEPS[mode][locale];
     const stepIndex = typingStepByThread[activeThreadId] ?? 0;
     return steps[Math.min(stepIndex, steps.length - 1)] ?? labels.analyzing;
-  }, [activeThread?.mode, activeThreadId, draft.mode, labels.analyzing, locale, typingByThread, typingStepByThread]);
+  }, [activeThread?.mode, activeThreadId, draft.mode, labels.analyzing, locale, typingByThread, typingHasImageByThread, typingStepByThread]);
   const brand = {
     name: "WK Insight",
     subtitle: locale === "zh" ? "精密量測智慧助理" : "Precision Measurement Intelligence",
@@ -788,19 +790,22 @@ export default function Home() {
     setDraft((prev) => ({ ...prev, text: "", images: [] }));
     setTypingByThread((prev) => ({ ...prev, [activeThreadId]: true }));
     setTypingStepByThread((prev) => ({ ...prev, [activeThreadId]: 0 }));
+    setTypingHasImageByThread((prev) => ({ ...prev, [activeThreadId]: hasImage }));
 
     const threadId = activeThreadId;
-    const stepCount = ANALYSIS_STEPS[mode][locale].length;
-    if (typingTimersRef.current[threadId]) {
-      window.clearInterval(typingTimersRef.current[threadId]);
+    if (hasImage) {
+      const stepCount = ANALYSIS_STEPS[mode][locale].length;
+      if (typingTimersRef.current[threadId]) {
+        window.clearInterval(typingTimersRef.current[threadId]);
+      }
+      typingTimersRef.current[threadId] = window.setInterval(() => {
+        setTypingStepByThread((prev) => {
+          const current = prev[threadId] ?? 0;
+          if (current >= stepCount - 1) return prev;
+          return { ...prev, [threadId]: current + 1 };
+        });
+      }, 15000);
     }
-    typingTimersRef.current[threadId] = window.setInterval(() => {
-      setTypingStepByThread((prev) => {
-        const current = prev[threadId] ?? 0;
-        if (current >= stepCount - 1) return prev;
-        return { ...prev, [threadId]: current + 1 };
-      });
-    }, 15000);
 
     try {
       const history = (messagesByThread[threadId] ?? [])
@@ -931,6 +936,7 @@ export default function Home() {
     } finally {
       setTypingByThread((prev) => ({ ...prev, [threadId]: false }));
       setTypingStepByThread((prev) => ({ ...prev, [threadId]: 0 }));
+      setTypingHasImageByThread((prev) => ({ ...prev, [threadId]: false }));
       if (typingTimersRef.current[threadId]) {
         window.clearInterval(typingTimersRef.current[threadId]);
         delete typingTimersRef.current[threadId];
