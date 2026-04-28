@@ -9,7 +9,6 @@ import { GraphResultCard } from "@/components/GraphResultCard";
 type MessageItemProps = {
   message: Message;
   onImageClick: (src: string) => void;
-  onInsertSummary: (summary: string) => void;
   onInsertPrompt: (prompt: string) => void;
   locale: "zh" | "en";
   labels: {
@@ -40,7 +39,6 @@ const resolveText = (value: string | LocalizedString, locale: "zh" | "en") => {
 export function MessageItem({
   message,
   onImageClick,
-  onInsertSummary,
   onInsertPrompt,
   locale,
   labels
@@ -125,7 +123,6 @@ export function MessageItem({
                   <DUTResultCard
                     result={message.result}
                     locale={locale}
-                    onInsertSummary={onInsertSummary}
                     onInsertPrompt={onInsertPrompt}
                   />
                 </div>
@@ -134,7 +131,7 @@ export function MessageItem({
               {message.type === "graph_result" && (
                 <div className="mt-2">
                   <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-400">{labels.result}</div>
-                  <GraphResultCard result={message.result} locale={locale} onInsertSummary={onInsertSummary} />
+                  <GraphResultCard result={message.result} locale={locale} />
                 </div>
               )}
             </div>

@@ -887,13 +887,6 @@ export default function Home() {
     }
   };
 
-  const handleInsertSummary = (summary: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      text: prev.text ? `${prev.text}\n${summary}` : summary
-    }));
-  };
-
   const handleInsertPrompt = (prompt: string) => {
     setDraft((prev) => ({
       ...prev,
@@ -973,7 +966,6 @@ export default function Home() {
           onOpenSidebar={() => setSidebarOpen(true)}
           onExport={handleExport}
           onClear={handleClear}
-          onInsertSummary={handleInsertSummary}
           onInsertPrompt={handleInsertPrompt}
           onImageClick={(src) => setActiveImage(src)}
           draft={draft}

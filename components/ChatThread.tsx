@@ -48,7 +48,6 @@ type ChatThreadProps = {
   onOpenSidebar: () => void;
   onExport: () => void;
   onClear: () => void;
-  onInsertSummary: (summary: string) => void;
   onInsertPrompt: (prompt: string) => void;
   onImageClick: (src: string) => void;
   draft: ComposerDraft;
@@ -77,7 +76,6 @@ export function ChatThread({
   onOpenSidebar,
   onExport,
   onClear,
-  onInsertSummary,
   onInsertPrompt,
   onImageClick,
   draft,
@@ -156,7 +154,6 @@ export function ChatThread({
               message={message}
               locale={locale}
               onImageClick={onImageClick}
-              onInsertSummary={onInsertSummary}
               onInsertPrompt={onInsertPrompt}
               labels={labels}
             />
