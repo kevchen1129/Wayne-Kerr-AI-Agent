@@ -265,7 +265,7 @@ export function GraphResultCard({ result, locale }: GraphResultCardProps) {
           </div>
         )}
 
-        {analysisText && (
+        {analysisText && !result.resonanceFrequency && (
           <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
             <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
               {locale === "zh" ? "詳細分析" : "Detailed Analysis"}
