@@ -169,7 +169,81 @@ const normalizeProducts = (value: unknown) => {
     }));
 };
 
+const ensureDomMatrixPolyfill = async () => {
+  if (typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix !== "undefined") {
+    return;
+  }
+
+  const BaseDOMMatrix = (await import("@thednp/dommatrix")).default ?? (await import("@thednp/dommatrix"));
+
+  class DOMMatrixPolyfill extends (BaseDOMMatrix as new (init?: unknown) => {
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+    e: number;
+    f: number;
+    multiply(other: unknown): {
+      a: number;
+      b: number;
+      c: number;
+      d: number;
+      e: number;
+      f: number;
+    };
+    multiplySelf(other: unknown): unknown;
+    translate(x?: number, y?: number): unknown;
+    scale(x?: number, y?: number): unknown;
+  }) {
+    preMultiplySelf(other: {
+      multiply?: (value: unknown) => { a: number; b: number; c: number; d: number; e: number; f: number };
+    }) {
+      if (other && typeof other.multiply === "function") {
+        const result = other.multiply(this);
+        this.a = result.a;
+        this.b = result.b;
+        this.c = result.c;
+        this.d = result.d;
+        this.e = result.e;
+        this.f = result.f;
+      }
+      return this;
+    }
+
+    invertSelf() {
+      const det = this.a * this.d - this.b * this.c;
+      if (!det) {
+        this.a = NaN;
+        this.b = NaN;
+        this.c = NaN;
+        this.d = NaN;
+        this.e = NaN;
+        this.f = NaN;
+        return this;
+      }
+
+      const a = this.a;
+      const b = this.b;
+      const c = this.c;
+      const d = this.d;
+      const e = this.e;
+      const f = this.f;
+
+      this.a = d / det;
+      this.b = -b / det;
+      this.c = -c / det;
+      this.d = a / det;
+      this.e = (c * f - d * e) / det;
+      this.f = (b * e - a * f) / det;
+      return this;
+    }
+  }
+
+  (globalThis as { DOMMatrix?: unknown }).DOMMatrix = DOMMatrixPolyfill;
+};
+
 const extractPdfText = async (pdfBuffer: Buffer) => {
+  await ensureDomMatrixPolyfill();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(pdfBuffer),

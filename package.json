@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@thednp/dommatrix": "^3.0.4",
     "next": "14.2.35",
     "pdf-parse": "^2.4.5",
     "react": "18.3.1",
