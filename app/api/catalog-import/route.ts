@@ -224,6 +224,21 @@ export async function POST(request: Request) {
     }
 
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+    if (
+      typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix === "undefined" ||
+      typeof (globalThis as { ImageData?: unknown }).ImageData === "undefined" ||
+      typeof (globalThis as { Path2D?: unknown }).Path2D === "undefined"
+    ) {
+      const canvasModule = await import("@napi-rs/canvas");
+      const globals = globalThis as {
+        DOMMatrix?: unknown;
+        ImageData?: unknown;
+        Path2D?: unknown;
+      };
+      globals.DOMMatrix ??= canvasModule.DOMMatrix;
+      globals.ImageData ??= canvasModule.ImageData;
+      globals.Path2D ??= canvasModule.Path2D;
+    }
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
     const parsedPdf = await parser.getText();
