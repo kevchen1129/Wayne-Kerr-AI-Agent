@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
-import { PDFParse } from "pdf-parse";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 type CatalogImportRequest = {
   text?: string;
@@ -221,6 +224,7 @@ export async function POST(request: Request) {
     }
 
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
     const parsedPdf = await parser.getText();
     await parser.destroy();
