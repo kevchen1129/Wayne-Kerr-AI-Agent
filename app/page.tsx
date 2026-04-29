@@ -102,6 +102,14 @@ const TOOL_DEFS: Array<{
       zh: "掃 DC Bias 曲線，計算 L 下跌 20% 的飽和點與電流值。",
       en: "Analyze DC bias sweep to find the 20% inductance drop point."
     }
+  },
+  {
+    id: "catalog_qa",
+    title: { zh: "產品目錄問答", en: "Catalog Q&A" },
+    description: {
+      zh: "直接查詢已上傳到雲端的 Wayne Kerr 產品型錄與規格資料。",
+      en: "Ask questions against Wayne Kerr catalog data stored in the cloud."
+    }
   }
 ];
 
@@ -175,6 +183,10 @@ const ANALYSIS_STEPS: Record<
   dc_bias_saturation: {
     zh: ["整理圖片中…", "讀取 DC Bias 曲線中…", "估算飽和點中…", "整理分析摘要中…"],
     en: ["Preparing image…", "Reading DC bias curve…", "Estimating saturation point…", "Preparing analysis summary…"]
+  },
+  catalog_qa: {
+    zh: ["查詢產品資料中…", "整理規格欄位中…", "生成回覆中…", "整理分析摘要中…"],
+    en: ["Looking up catalog data…", "Collecting spec fields…", "Drafting answer…", "Preparing summary…"]
   }
 };
 
@@ -424,7 +436,8 @@ const initialThreads: Thread[] = [
   { id: draftThreadId, title: "新對話", mode: "identify_dut", updatedAt: now, isDraft: true },
   { id: "thread-dut", title: "被動元件測量建議", mode: "identify_dut", updatedAt: now },
   { id: "thread-eq", title: "等效電路", mode: "interpret_graph", updatedAt: now },
-  { id: "thread-res", title: "DC Bias 飽和分析", mode: "dc_bias_saturation", updatedAt: now }
+  { id: "thread-res", title: "DC Bias 飽和分析", mode: "dc_bias_saturation", updatedAt: now },
+  { id: "thread-cat", title: "產品目錄問答", mode: "catalog_qa", updatedAt: now }
 ];
 
 const initialMessages: Record<string, Message[]> = {
@@ -512,6 +525,25 @@ const initialMessages: Record<string, Message[]> = {
       result: mockDcBiasResult,
       createdAt: now
     }
+  ],
+  "thread-cat": [
+    {
+      id: "msg-cat-1",
+      role: "user",
+      type: "text",
+      text: "6500B 最高可以測到多少頻率？",
+      createdAt: now
+    },
+    {
+      id: "msg-cat-2",
+      role: "assistant",
+      type: "text",
+      text: {
+        zh: "產品目錄問答會先查 Wayne Kerr 雲端型錄資料，再整理成自然語言回答。你可以直接問型號規格、量測功能或型號差異。",
+        en: "Catalog Q&A looks up Wayne Kerr cloud catalog data first, then turns it into a natural-language answer. You can ask about specs, measurement functions, or model differences directly."
+      },
+      createdAt: now
+    }
   ]
 };
 
@@ -539,8 +571,8 @@ export default function Home() {
   const validation = useMemo(() => {
     const text = draft.text.trim();
     const hasText = text.length > 0;
-    const hasImage = draft.images.length > 0;
     const mode = activeThread?.mode ?? draft.mode;
+    const hasImage = mode === "catalog_qa" ? false : draft.images.length > 0;
 
     if (!hasText && !hasImage) {
       return { ok: false, error: null };
@@ -569,7 +601,10 @@ export default function Home() {
   const labels = UI_TEXT[locale];
   const localeToggleLabel = locale === "zh" ? "EN" : "中文";
   const newChatTitle = locale === "zh" ? "新對話" : "New chat";
-  const canSend = (draft.text.trim().length > 0 || draft.images.length > 0) && validation.ok;
+  const canSend =
+    (draft.text.trim().length > 0 ||
+      ((activeThread?.mode ?? draft.mode) !== "catalog_qa" && draft.images.length > 0)) &&
+    validation.ok;
   const activeTypingLabel = useMemo(() => {
     if (!typingByThread[activeThreadId]) return labels.analyzing;
     if (!typingHasImageByThread[activeThreadId]) return labels.analyzing;
@@ -587,7 +622,15 @@ export default function Home() {
   useEffect(() => {
     if (!activeThread) return;
     setDraft((prev) =>
-      prev.mode === activeThread.mode ? prev : { ...prev, mode: activeThread.mode }
+      prev.mode === activeThread.mode
+        ? activeThread.mode === "catalog_qa" && prev.images.length > 0
+          ? { ...prev, images: [] }
+          : prev
+        : {
+            ...prev,
+            mode: activeThread.mode,
+            images: activeThread.mode === "catalog_qa" ? [] : prev.images
+          }
     );
   }, [activeThread]);
 
@@ -752,13 +795,14 @@ export default function Home() {
     if (typingByThread[activeThreadId]) return;
     if (!validation.ok) return;
     const text = draft.text.trim();
-    if (!text && draft.images.length === 0) return;
+    const mode: AnalysisMode = activeThread?.mode ?? draft.mode;
+    const draftImages = mode === "catalog_qa" ? [] : draft.images;
+    if (!text && draftImages.length === 0) return;
 
     const nowStamp = new Date().toISOString();
-    const lastImageUrl = draft.images[draft.images.length - 1]?.url;
-    const hasImage = draft.images.length > 0;
+    const lastImageUrl = draftImages[draftImages.length - 1]?.url;
+    const hasImage = draftImages.length > 0;
     const newUserMessages: Message[] = [];
-    const mode: AnalysisMode = activeThread?.mode ?? draft.mode;
 
     if (text) {
       newUserMessages.push({
@@ -770,7 +814,7 @@ export default function Home() {
       });
     }
 
-    draft.images.forEach((img) => {
+    draftImages.forEach((img) => {
       newUserMessages.push({
         id: makeId(),
         role: "user",
@@ -816,32 +860,38 @@ export default function Home() {
           text: typeof message.text === "string" ? message.text : message.text[locale] ?? ""
         }));
 
-      const imagePayload = await Promise.all(
-        draft.images.map(async (img) => {
-          if (!img.file) return null;
-          const original = await fileToDataUrl(img.file);
-          try {
-            const cropped = await fileToCompressedJpeg(img.file);
-            return { original, cropped };
-          } catch (error) {
-            console.warn("Image compress failed, fallback to raw data URL.", error);
-            return { original, cropped: original };
-          }
-        })
-      );
+      const imagePayload =
+        mode === "catalog_qa"
+          ? []
+          : await Promise.all(
+              draft.images.map(async (img) => {
+                if (!img.file) return null;
+                const original = await fileToDataUrl(img.file);
+                try {
+                  const cropped = await fileToCompressedJpeg(img.file);
+                  return { original, cropped };
+                } catch (error) {
+                  console.warn("Image compress failed, fallback to raw data URL.", error);
+                  return { original, cropped: original };
+                }
+              })
+            );
 
-      const newImages = imagePayload
-        .filter((item): item is { original: string; cropped: string } => Boolean(item))
-        .flatMap((item) =>
-          item.cropped && item.cropped !== item.original
-            ? [item.original, item.cropped]
-            : [item.original]
-        );
+      const newImages =
+        mode === "catalog_qa"
+          ? []
+          : imagePayload
+              .filter((item): item is { original: string; cropped: string } => Boolean(item))
+              .flatMap((item) =>
+                item.cropped && item.cropped !== item.original
+                  ? [item.original, item.cropped]
+                  : [item.original]
+              );
 
-      const fallbackImage = lastImageByThread[threadId];
+      const fallbackImage = mode === "catalog_qa" ? undefined : lastImageByThread[threadId];
       const imagesForApi = newImages.length > 0 ? newImages : fallbackImage ? [fallbackImage] : [];
 
-      if (imagePayload.length > 0) {
+      if (mode !== "catalog_qa" && imagePayload.length > 0) {
         const latestOriginal = imagePayload
           .filter((item): item is { original: string; cropped: string } => Boolean(item))
           .map((item) => item.original)
@@ -851,7 +901,8 @@ export default function Home() {
         }
       }
 
-      const response = await fetch("/api/grok", {
+      const endpoint = mode === "catalog_qa" ? "/api/catalog-qa" : "/api/grok";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -12,7 +12,11 @@ export type LocalImage = {
   file?: File;
 };
 
-export type AnalysisMode = "identify_dut" | "interpret_graph" | "dc_bias_saturation";
+export type AnalysisMode =
+  | "identify_dut"
+  | "interpret_graph"
+  | "dc_bias_saturation"
+  | "catalog_qa";
 
 export type LocalizedString = string | { zh: string; en: string };
 

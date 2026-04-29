@@ -8,7 +8,8 @@ import { cx } from "@/lib/utils";
 const MODE_LABELS: Record<AnalysisMode, { zh: string; en: string }> = {
   identify_dut: { zh: "被動元件測量建議", en: "DUT Measurement Setup" },
   interpret_graph: { zh: "等效電路", en: "Equivalent Circuit" },
-  dc_bias_saturation: { zh: "DC Bias 飽和分析", en: "DC Bias Saturation" }
+  dc_bias_saturation: { zh: "DC Bias 飽和分析", en: "DC Bias Saturation" },
+  catalog_qa: { zh: "產品目錄問答", en: "Catalog Q&A" }
 };
 
 const MODE_HINTS: Record<AnalysisMode, { zh: string; en: string }> = {
@@ -23,19 +24,25 @@ const MODE_HINTS: Record<AnalysisMode, { zh: string; en: string }> = {
   dc_bias_saturation: {
     zh: "上傳 DC Bias 掃描曲線，計算飽和點（L 下跌 20%）。",
     en: "Upload a DC bias sweep to find the 20% inductance drop point."
+  },
+  catalog_qa: {
+    zh: "直接詢問 Wayne Kerr 產品規格，例如最高頻率、量測功能或是否支援 DC Bias。",
+    en: "Ask Wayne Kerr catalog questions directly, such as max frequency, functions, or DC bias support."
   }
 };
 
 const MODE_BADGE: Record<AnalysisMode, string> = {
   identify_dut: "DUT",
   interpret_graph: "EQ",
-  dc_bias_saturation: "DC"
+  dc_bias_saturation: "DC",
+  catalog_qa: "CAT"
 };
 
 const MODE_BADGE_COLOR: Record<AnalysisMode, string> = {
   identify_dut: "bg-blue-600",
   interpret_graph: "bg-violet-600",
-  dc_bias_saturation: "bg-amber-600"
+  dc_bias_saturation: "bg-amber-600",
+  catalog_qa: "bg-emerald-600"
 };
 
 type ComposerProps = {
@@ -84,6 +91,7 @@ export function Composer({
 
   const hasContent = draft.text.trim().length > 0 || draft.images.length > 0;
   const canSend = canSendOverride ?? (hasContent && !validationError);
+  const allowsImages = mode !== "catalog_qa";
 
   return (
     <div className="border-t border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_-16px_30px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
@@ -142,26 +150,30 @@ export function Composer({
       )}
 
       <div className="flex items-end gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white text-slate-700 transition hover:-translate-y-0.5 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-          aria-label="Upload or capture image"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 7h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
-            <path d="M12 11l3 3-3 3-3-3 3-3z" />
-            <path d="M7 7l2-3h6l2 3" />
-          </svg>
-        </button>
+        {allowsImages && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white text-slate-700 transition hover:-translate-y-0.5 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              aria-label="Upload or capture image"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
+                <path d="M12 11l3 3-3 3-3-3 3-3z" />
+                <path d="M7 7l2-3h6l2 3" />
+              </svg>
+            </button>
+          </>
+        )}
 
         <div className="flex-1 rounded-3xl border border-slate-300/80 bg-slate-50 px-4 py-3 shadow-sm transition focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900">
           <textarea
@@ -175,12 +187,16 @@ export function Composer({
                   ? "例如：元件上印字、目標頻段、預期 L/C/R…"
                   : mode === "interpret_graph"
                     ? "例如：掃頻範圍、曲線型態、想要的等效電路複雜度…"
-                    : "例如：DC bias 範圍、要標示的 L 下降比例…"
+                    : mode === "dc_bias_saturation"
+                      ? "例如：DC bias 範圍、要標示的 L 下降比例…"
+                      : "例如：6500B 最高頻率是多少？支不支援 DC Bias？"
                 : mode === "identify_dut"
                   ? "e.g. markings, target band, expected L/C/R..."
                   : mode === "interpret_graph"
                     ? "e.g. sweep range, curve type, desired model complexity..."
-                    : "e.g. DC bias range, target drop percentage..."
+                    : mode === "dc_bias_saturation"
+                      ? "e.g. DC bias range, target drop percentage..."
+                      : "e.g. What is the max frequency of 6500B? Does it support DC bias?"
             }
             className="w-full resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />

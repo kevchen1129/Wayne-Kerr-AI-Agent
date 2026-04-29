@@ -21,13 +21,15 @@ type MessageItemProps = {
 const MODE_LABEL: Record<AnalysisMode, string> = {
   identify_dut: "DUT",
   interpret_graph: "Sweep",
-  dc_bias_saturation: "DC Bias"
+  dc_bias_saturation: "DC Bias",
+  catalog_qa: "Catalog"
 };
 
 const MODE_COLOR: Record<AnalysisMode, string> = {
   identify_dut: "bg-blue-600",
   interpret_graph: "bg-violet-600",
-  dc_bias_saturation: "bg-amber-600"
+  dc_bias_saturation: "bg-amber-600",
+  catalog_qa: "bg-emerald-600"
 };
 
 const resolveText = (value: string | LocalizedString, locale: "zh" | "en") => {
