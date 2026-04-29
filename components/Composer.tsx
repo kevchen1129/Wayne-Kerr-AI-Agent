@@ -26,8 +26,8 @@ const MODE_HINTS: Record<AnalysisMode, { zh: string; en: string }> = {
     en: "Upload a DC bias sweep to find the 20% inductance drop point."
   },
   catalog_qa: {
-    zh: "直接詢問 Wayne Kerr 產品規格，例如最高頻率、量測功能或是否支援 DC Bias。",
-    en: "Ask Wayne Kerr catalog questions directly, such as max frequency, functions, or DC bias support."
+    zh: "可直接問產品規格，也可貼上 Blob 的 PDF URL 自動匯入型錄。",
+    en: "Ask product questions directly, or paste a Blob PDF URL to import a catalog automatically."
   }
 };
 
@@ -189,14 +189,14 @@ export function Composer({
                     ? "例如：掃頻範圍、曲線型態、想要的等效電路複雜度…"
                     : mode === "dc_bias_saturation"
                       ? "例如：DC bias 範圍、要標示的 L 下降比例…"
-                      : "例如：6500B 最高頻率是多少？支不支援 DC Bias？"
+                      : "例如：6500B 最高頻率是多少？或直接貼上 Blob PDF URL 進行匯入"
                 : mode === "identify_dut"
                   ? "e.g. markings, target band, expected L/C/R..."
                   : mode === "interpret_graph"
                     ? "e.g. sweep range, curve type, desired model complexity..."
                     : mode === "dc_bias_saturation"
                       ? "e.g. DC bias range, target drop percentage..."
-                      : "e.g. What is the max frequency of 6500B? Does it support DC bias?"
+                      : "e.g. What is the max frequency of 6500B? Or paste a Blob PDF URL to import it"
             }
             className="w-full resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />

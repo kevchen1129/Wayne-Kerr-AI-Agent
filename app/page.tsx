@@ -190,6 +190,8 @@ const ANALYSIS_STEPS: Record<
   }
 };
 
+const PDF_URL_REGEX = /(https?:\/\/[^\s]+\.pdf(?:\?[^\s]*)?)/i;
+
 const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const tdkInductorImage =
   "https://product.tdk.com/system/files/styles/tech_note_detail_thumbnail/private/thumb_pov_inductors_tfm-2.png?itok=Jzw3PM6O";
@@ -901,7 +903,13 @@ export default function Home() {
         }
       }
 
-      const endpoint = mode === "catalog_qa" ? "/api/catalog-qa" : "/api/grok";
+      const isCatalogImport = mode === "catalog_qa" && PDF_URL_REGEX.test(text);
+      const endpoint =
+        mode === "catalog_qa"
+          ? isCatalogImport
+            ? "/api/catalog-import"
+            : "/api/catalog-qa"
+          : "/api/grok";
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
