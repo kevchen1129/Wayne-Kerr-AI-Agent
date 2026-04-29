@@ -15,9 +15,6 @@ const nextConfig = {
   basePath,
   assetPrefix: basePath,
   images: { unoptimized: true },
-  experimental: {
-    serverComponentsExternalPackages: ["@napi-rs/canvas"]
-  },
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath
   }

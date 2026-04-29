@@ -169,6 +169,35 @@ const normalizeProducts = (value: unknown) => {
     }));
 };
 
+const extractPdfText = async (pdfBuffer: Buffer) => {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    disableFontFace: true
+  });
+
+  const pdf = await loadingTask.promise;
+  const pages: string[] = [];
+
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .filter(Boolean)
+        .join(" ");
+      pages.push(pageText);
+    }
+  } finally {
+    await pdf.destroy();
+  }
+
+  return pages.join("\n").trim();
+};
+
 export async function POST(request: Request) {
   const apiKey = process.env.XAI_API_KEY;
   const postgresUrl = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
@@ -224,26 +253,7 @@ export async function POST(request: Request) {
     }
 
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-    if (
-      typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix === "undefined" ||
-      typeof (globalThis as { ImageData?: unknown }).ImageData === "undefined" ||
-      typeof (globalThis as { Path2D?: unknown }).Path2D === "undefined"
-    ) {
-      const canvasModule = await import("@napi-rs/canvas");
-      const globals = globalThis as {
-        DOMMatrix?: unknown;
-        ImageData?: unknown;
-        Path2D?: unknown;
-      };
-      globals.DOMMatrix ??= canvasModule.DOMMatrix;
-      globals.ImageData ??= canvasModule.ImageData;
-      globals.Path2D ??= canvasModule.Path2D;
-    }
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
-    const parsedPdf = await parser.getText();
-    await parser.destroy();
-    const pdfText = parsedPdf.text?.trim() || "";
+    const pdfText = await extractPdfText(pdfBuffer);
 
     if (!pdfText) {
       return NextResponse.json(
