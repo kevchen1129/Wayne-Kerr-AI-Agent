@@ -242,16 +242,31 @@ const ensureDomMatrixPolyfill = async () => {
   (globalThis as { DOMMatrix?: unknown }).DOMMatrix = DOMMatrixPolyfill;
 };
 
+const ensurePdfJsWorkerGlobal = async () => {
+  const globalRecord = globalThis as {
+    pdfjsWorker?: { WorkerMessageHandler?: unknown };
+  };
+
+  if (globalRecord.pdfjsWorker?.WorkerMessageHandler) {
+    return;
+  }
+
+  const workerModule = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  globalRecord.pdfjsWorker = {
+    WorkerMessageHandler: workerModule.WorkerMessageHandler
+  };
+};
+
 const extractPdfText = async (pdfBuffer: Buffer) => {
   await ensureDomMatrixPolyfill();
+  await ensurePdfJsWorkerGlobal();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const documentInit = {
     data: new Uint8Array(pdfBuffer),
-    disableWorker: true,
     useWorkerFetch: false,
     isEvalSupported: false,
     disableFontFace: true
-  } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker: boolean };
+  } as Parameters<typeof pdfjs.getDocument>[0];
   const loadingTask = pdfjs.getDocument(documentInit);
 
   const pdf = await loadingTask.promise;
