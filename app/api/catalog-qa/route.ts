@@ -28,6 +28,8 @@ type CatalogRow = {
 const BASE_URL = "https://api.x.ai/v1";
 const DEFAULT_MODEL = "grok-4.20-beta-0309-reasoning";
 const TIMEOUT_MS = 120000;
+const OFFICIAL_SITE_BASE = "https://www.waynekerr.com";
+const OFFICIAL_INSTRUMENTS_URL = `${OFFICIAL_SITE_BASE}/en-GB/products/instruments`;
 
 const extractOutputText = (data: unknown) => {
   if (!data || typeof data !== "object") return "";
@@ -66,6 +68,138 @@ const sanitizeCatalogAnswer = (text: string, locale: "zh" | "en") => {
     .replace(sourcePattern, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+};
+
+const decodeHtml = (text: string) =>
+  text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+
+const stripHtml = (html: string) =>
+  decodeHtml(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+
+type OfficialLink = {
+  href: string;
+  text: string;
+};
+
+type OfficialSnippet = {
+  url: string;
+  title: string;
+  text: string;
+};
+
+const extractOfficialLinks = (html: string): OfficialLink[] => {
+  const matches = Array.from(
+    html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)
+  );
+
+  return matches
+    .map((match) => ({
+      href: match[1]?.trim() || "",
+      text: stripHtml(match[2] || "")
+    }))
+    .filter((link) => link.href && link.text);
+};
+
+const buildOfficialCandidates = (modelHints: string[]) => {
+  const candidates = new Set<string>();
+
+  for (const hint of modelHints) {
+    const normalized = hint.toUpperCase();
+    const numericOnly = normalized.replace(/[^0-9]/g, "");
+    candidates.add(normalized);
+    if (numericOnly) {
+      candidates.add(numericOnly);
+    }
+    if (numericOnly.length >= 4) {
+      candidates.add(numericOnly.slice(0, 4));
+    }
+  }
+
+  return Array.from(candidates).filter(Boolean);
+};
+
+const findMatchingOfficialUrls = (links: OfficialLink[], candidates: string[]) => {
+  const urls = new Set<string>();
+
+  for (const link of links) {
+    const haystack = `${link.text} ${link.href}`.toUpperCase();
+    if (!candidates.some((candidate) => haystack.includes(candidate))) {
+      continue;
+    }
+
+    const absoluteUrl = link.href.startsWith("http")
+      ? link.href
+      : new URL(link.href, OFFICIAL_SITE_BASE).toString();
+
+    if (!absoluteUrl.startsWith(OFFICIAL_SITE_BASE)) {
+      continue;
+    }
+
+    urls.add(absoluteUrl);
+  }
+
+  return Array.from(urls).slice(0, 4);
+};
+
+const fetchOfficialFallbackSnippets = async (modelHints: string[]) => {
+  if (modelHints.length === 0) {
+    return [];
+  }
+
+  const listingResponse = await fetch(OFFICIAL_INSTRUMENTS_URL, {
+    headers: { "User-Agent": "WK Insight Catalog QA" },
+    cache: "no-store"
+  });
+
+  if (!listingResponse.ok) {
+    return [];
+  }
+
+  const listingHtml = await listingResponse.text();
+  const links = extractOfficialLinks(listingHtml);
+  const candidates = buildOfficialCandidates(modelHints);
+  const matchedUrls = findMatchingOfficialUrls(links, candidates);
+
+  const snippets = await Promise.all(
+    matchedUrls.map(async (url) => {
+      try {
+        const pageResponse = await fetch(url, {
+          headers: { "User-Agent": "WK Insight Catalog QA" },
+          cache: "no-store"
+        });
+        if (!pageResponse.ok) {
+          return null;
+        }
+
+        const html = await pageResponse.text();
+        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = stripHtml(titleMatch?.[1] || url);
+        const text = stripHtml(html).slice(0, 5000);
+        if (!text) {
+          return null;
+        }
+
+        return { url, title, text } satisfies OfficialSnippet;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return snippets.filter((item): item is OfficialSnippet => Boolean(item));
 };
 
 const extractModelCandidates = (text: string) => {
@@ -115,6 +249,51 @@ const buildCatalogPrompt = (
     recentHistory ? `Recent conversation:\n${recentHistory}` : "",
     `User question: ${question}`,
     `catalog_records:\n${serializedRecords}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
+const buildOfficialFallbackPrompt = (
+  locale: "zh" | "en",
+  question: string,
+  snippets: OfficialSnippet[],
+  history: Array<{ role: "user" | "assistant"; text: string }>
+) => {
+  const serializedSnippets = JSON.stringify(snippets, null, 2);
+  const recentHistory = history
+    .slice(-4)
+    .map((item) => `${item.role}: ${item.text}`)
+    .join("\n");
+
+  if (locale === "zh") {
+    return [
+      "你是 Wayne Kerr 官網產品問答助理。",
+      "資料庫沒有命中時，你可以根據提供的 Wayne Kerr 官網頁面片段回答。",
+      "你只能根據 official_site_snippets 回答，不可以捏造不存在的規格。",
+      "所有回覆都必須使用繁體中文；型號、單位、參數縮寫可以保留英文。",
+      "如果片段裡沒有明確答案，請直接說 Wayne Kerr 官網目前抓到的內容沒有明確寫出這個欄位。",
+      "直接回答問題即可，必要時補 2–4 點條列。",
+      "不要附上來源、網址、檔名或任何 Markdown 粗體符號。",
+      recentHistory ? `最近對話：\n${recentHistory}` : "",
+      `使用者問題：${question}`,
+      `official_site_snippets:\n${serializedSnippets}`
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return [
+    "You are a Wayne Kerr website product Q&A assistant.",
+    "When the database has no matching records, answer from the provided Wayne Kerr official website snippets.",
+    "Answer strictly from official_site_snippets and do not invent missing specs.",
+    "All human-readable output must be in English only.",
+    "If the snippets do not explicitly contain the answer, say the Wayne Kerr website content retrieved so far does not clearly state that field.",
+    "Answer directly, then add 2–4 short bullets only if helpful.",
+    "Do not include sources, URLs, filenames, or Markdown bold markers.",
+    recentHistory ? `Recent conversation:\n${recentHistory}` : "",
+    `User question: ${question}`,
+    `official_site_snippets:\n${serializedSnippets}`
   ]
     .filter(Boolean)
     .join("\n");
@@ -213,7 +392,85 @@ export async function POST(request: Request) {
   }
 
   if (rows.length === 0) {
-    return NextResponse.json({ text: formatNoDataMessage(locale, modelHints) });
+    let officialSnippets: OfficialSnippet[] = [];
+
+    try {
+      officialSnippets = await fetchOfficialFallbackSnippets(modelHints);
+    } catch {
+      officialSnippets = [];
+    }
+
+    if (officialSnippets.length === 0) {
+      return NextResponse.json({ text: formatNoDataMessage(locale, modelHints) });
+    }
+
+    if (!apiKey) {
+      const fallback =
+        locale === "zh"
+          ? "資料庫沒有命中，但已從 Wayne Kerr 官網找到相關頁面；目前未設定 XAI_API_KEY，因此無法整理成自然語言答案。"
+          : "The database had no match, but relevant Wayne Kerr website pages were found. XAI_API_KEY is not configured, so I cannot summarize them into a natural-language answer yet.";
+      return NextResponse.json({ text: fallback });
+    }
+
+    const websiteController = new AbortController();
+    const websiteTimeout = setTimeout(() => websiteController.abort(), TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${BASE_URL}/responses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: process.env.XAI_MODEL || DEFAULT_MODEL,
+          input: [
+            {
+              role: "system",
+              content: [
+                {
+                  type: "input_text",
+                  text: buildOfficialFallbackPrompt(locale, text, officialSnippets, history)
+                }
+              ]
+            },
+            {
+              role: "user",
+              content: [{ type: "input_text", text }]
+            }
+          ],
+          store: false,
+          temperature: 0
+        }),
+        signal: websiteController.signal
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return NextResponse.json(
+          { error: errorText || `xAI request failed (${response.status}).` },
+          { status: response.status }
+        );
+      }
+
+      const data = await response.json();
+      const outputText = extractOutputText(data);
+      return NextResponse.json({
+        text: outputText
+          ? sanitizeCatalogAnswer(outputText, locale)
+          : formatNoDataMessage(locale, modelHints)
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : locale === "zh"
+            ? "未知錯誤"
+            : "Unknown error";
+      return NextResponse.json({ error: message }, { status: 500 });
+    } finally {
+      clearTimeout(websiteTimeout);
+    }
   }
 
   if (!apiKey) {
