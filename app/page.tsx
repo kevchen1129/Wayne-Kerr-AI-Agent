@@ -80,11 +80,11 @@ const TOOL_DEFS: Array<{
   description: { zh: string; en: string };
 }> = [
   {
-    id: "identify_dut",
-    title: { zh: "被動元件測量建議", en: "DUT Measurement Setup" },
+    id: "catalog_qa",
+    title: { zh: "產品目錄問答", en: "Catalog Q&A" },
     description: {
-      zh: "辨識 R/L/C，帶出建議量測模式、頻率、電平與工作範圍。",
-      en: "Identify R/L/C and suggest measurement mode, frequency, level, and working range."
+      zh: "直接查詢已上傳到雲端的 Wayne Kerr 產品型錄與規格資料。",
+      en: "Ask questions against Wayne Kerr catalog data stored in the cloud."
     }
   },
   {
@@ -101,14 +101,6 @@ const TOOL_DEFS: Array<{
     description: {
       zh: "掃 DC Bias 曲線，計算 L 下跌 20% 的飽和點與電流值。",
       en: "Analyze DC bias sweep to find the 20% inductance drop point."
-    }
-  },
-  {
-    id: "catalog_qa",
-    title: { zh: "產品目錄問答", en: "Catalog Q&A" },
-    description: {
-      zh: "直接查詢已上傳到雲端的 Wayne Kerr 產品型錄與規格資料。",
-      en: "Ask questions against Wayne Kerr catalog data stored in the cloud."
     }
   }
 ];
@@ -435,7 +427,7 @@ const now = new Date().toISOString();
 const draftThreadId = "thread-new";
 
 const initialThreads: Thread[] = [
-  { id: draftThreadId, title: "新對話", mode: "identify_dut", updatedAt: now, isDraft: true },
+  { id: draftThreadId, title: "新對話", mode: "catalog_qa", updatedAt: now, isDraft: true },
   { id: "thread-dut", title: "被動元件測量建議", mode: "identify_dut", updatedAt: now },
   { id: "thread-eq", title: "等效電路", mode: "interpret_graph", updatedAt: now },
   { id: "thread-res", title: "DC Bias 飽和分析", mode: "dc_bias_saturation", updatedAt: now },
@@ -559,7 +551,7 @@ export default function Home() {
   const [draft, setDraft] = useState<ComposerDraft>({
     text: "",
     images: [],
-    mode: "identify_dut"
+    mode: "catalog_qa"
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [typingByThread, setTypingByThread] = useState<Record<string, boolean>>({});
@@ -597,7 +589,7 @@ export default function Home() {
     () => messagesByThread[activeThreadId] ?? [],
     [messagesByThread, activeThreadId]
   );
-  const activeToolId = activeThread?.mode ?? "identify_dut";
+  const activeToolId = activeThread?.mode ?? "catalog_qa";
   const activeTool =
     toolOptions.find((tool) => tool.id === activeToolId) ?? toolOptions[0];
   const labels = UI_TEXT[locale];
@@ -671,7 +663,7 @@ export default function Home() {
     });
   };
 
-  const createDraftThread = (mode: AnalysisMode = "identify_dut") => {
+  const createDraftThread = (mode: AnalysisMode = "catalog_qa") => {
     const id = makeId();
     const nowStamp = new Date().toISOString();
     const newThread: Thread = {
