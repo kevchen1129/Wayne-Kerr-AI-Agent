@@ -210,6 +210,25 @@ const extractModelCandidates = (text: string) => {
   return Array.from(new Set(normalized)).slice(0, 8);
 };
 
+const matchesCatalogRow = (row: CatalogRow, modelHints: string[]) => {
+  if (modelHints.length === 0) {
+    return true;
+  }
+
+  const haystack = [
+    row.model,
+    row.product_name || "",
+    row.category || "",
+    row.summary_zh || "",
+    row.summary_en || "",
+    JSON.stringify(row.raw_specs_json || {})
+  ]
+    .join(" ")
+    .toUpperCase();
+
+  return modelHints.some((hint) => haystack.includes(hint));
+};
+
 const buildCatalogPrompt = (
   locale: "zh" | "en",
   question: string,
@@ -370,12 +389,7 @@ export async function POST(request: Request) {
     rows =
       modelHints.length > 0
         ? allRows
-            .filter((row) =>
-              modelHints.some((hint) =>
-                row.model.toUpperCase().includes(hint) ||
-                (row.product_name || "").toUpperCase().includes(hint)
-              )
-            )
+            .filter((row) => matchesCatalogRow(row, modelHints))
             .slice(0, 8)
         : allRows.slice(0, 8);
   } catch (error) {
