@@ -55,6 +55,19 @@ const extractOutputText = (data: unknown) => {
   return chunks.join("\n").trim();
 };
 
+const sanitizeCatalogAnswer = (text: string, locale: "zh" | "en") => {
+  const sourcePattern =
+    locale === "zh"
+      ? /^\s*來源\s*[:：].*$/gim
+      : /^\s*source\s*[:：].*$/gim;
+
+  return text
+    .replace(/\*\*/g, "")
+    .replace(sourcePattern, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
 const extractModelCandidates = (text: string) => {
   const matches = text.toUpperCase().match(/[A-Z]{0,3}\d{3,5}[A-Z]{0,3}/g) ?? [];
   const normalized = matches
@@ -81,7 +94,8 @@ const buildCatalogPrompt = (
       "所有回覆都必須使用繁體中文；型號、單位、參數縮寫可以保留英文。",
       "如果資料表裡沒有明確寫出答案，請直接說目前已上傳的型錄資料沒有這個欄位。",
       "若能回答，優先直接回答問題，再用 2–4 點條列補充相關規格。",
-      "若有 source_pdf_url，最後加一行「來源：...」。",
+      "不要附上來源、網址、檔名或 source_pdf_url。",
+      "不要使用 Markdown 粗體、星號標記或 ** 符號。",
       recentHistory ? `最近對話：\n${recentHistory}` : "",
       `使用者問題：${question}`,
       `catalog_records:\n${serializedRecords}`
@@ -96,7 +110,8 @@ const buildCatalogPrompt = (
     "All human-readable output must be in English only.",
     "If the answer is not explicitly present in the records, say that the uploaded catalog data does not currently contain that field.",
     "When possible, answer directly first, then add 2–4 short bullets with supporting specs.",
-    "If a source_pdf_url exists, end with a 'Source:' line.",
+    "Do not include sources, URLs, filenames, or source_pdf_url in the answer.",
+    "Do not use Markdown bold or ** markers.",
     recentHistory ? `Recent conversation:\n${recentHistory}` : "",
     `User question: ${question}`,
     `catalog_records:\n${serializedRecords}`
@@ -256,7 +271,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ text: outputText });
+    return NextResponse.json({ text: sanitizeCatalogAnswer(outputText, locale) });
   } catch (error) {
     const isAbort = error instanceof Error && error.name === "AbortError";
     const message = isAbort
