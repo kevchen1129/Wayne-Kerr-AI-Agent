@@ -245,12 +245,14 @@ const ensureDomMatrixPolyfill = async () => {
 const extractPdfText = async (pdfBuffer: Buffer) => {
   await ensureDomMatrixPolyfill();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({
+  const documentInit = {
     data: new Uint8Array(pdfBuffer),
+    disableWorker: true,
     useWorkerFetch: false,
     isEvalSupported: false,
     disableFontFace: true
-  });
+  } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker: boolean };
+  const loadingTask = pdfjs.getDocument(documentInit);
 
   const pdf = await loadingTask.promise;
   const pages: string[] = [];
