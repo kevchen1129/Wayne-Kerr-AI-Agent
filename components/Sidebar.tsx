@@ -381,9 +381,11 @@ export function Sidebar({
           )}
         </div>
 
-        <div className="mt-4 text-xs text-slate-400">
-          {labels.prototypeNote}
-        </div>
+        {labels.prototypeNote ? (
+          <div className="mt-4 text-xs text-slate-400">
+            {labels.prototypeNote}
+          </div>
+        ) : null}
       </aside>
     </>
   );
