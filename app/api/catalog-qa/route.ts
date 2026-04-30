@@ -100,6 +100,11 @@ type OfficialSnippet = {
   text: string;
 };
 
+type FrequencyCandidate = {
+  valueHz: number;
+  label: string;
+};
+
 const extractOfficialLinks = (html: string): OfficialLink[] => {
   const matches = Array.from(
     html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)
@@ -227,6 +232,94 @@ const matchesCatalogRow = (row: CatalogRow, modelHints: string[]) => {
     .toUpperCase();
 
   return modelHints.some((hint) => haystack.includes(hint));
+};
+
+const isMaxFrequencyQuestion = (text: string) =>
+  /(最高頻率|最大頻率|頻率上限|max(?:imum)? frequency|highest frequency|frequency limit)/i.test(
+    text
+  );
+
+const extractFrequencyCandidatesFromText = (text: string) => {
+  const matches = Array.from(text.matchAll(/(\d+(?:\.\d+)?)\s*(Hz|kHz|MHz|GHz)\b/gi));
+
+  return matches
+    .map((match) => {
+      const rawValue = Number(match[1]);
+      const unit = match[2];
+      if (!Number.isFinite(rawValue)) return null;
+
+      const normalizedUnit = unit.toUpperCase();
+      const multiplier =
+        normalizedUnit === "GHZ"
+          ? 1_000_000_000
+          : normalizedUnit === "MHZ"
+            ? 1_000_000
+            : normalizedUnit === "KHZ"
+              ? 1_000
+              : 1;
+
+      return {
+        valueHz: rawValue * multiplier,
+        label: `${match[1]} ${unit}`
+      } satisfies FrequencyCandidate;
+    })
+    .filter((item): item is FrequencyCandidate => Boolean(item));
+};
+
+const formatFrequencyFromHz = (valueHz: number) => {
+  if (valueHz >= 1_000_000_000) {
+    return `${Number((valueHz / 1_000_000_000).toFixed(3)).toString()} GHz`;
+  }
+  if (valueHz >= 1_000_000) {
+    return `${Number((valueHz / 1_000_000).toFixed(3)).toString()} MHz`;
+  }
+  if (valueHz >= 1_000) {
+    return `${Number((valueHz / 1_000).toFixed(3)).toString()} kHz`;
+  }
+  return `${Number(valueHz.toFixed(3)).toString()} Hz`;
+};
+
+const getStructuredMaxFrequency = (row: CatalogRow) => {
+  const rawValue =
+    typeof row.max_frequency_value === "number"
+      ? row.max_frequency_value
+      : typeof row.max_frequency_value === "string"
+        ? Number(row.max_frequency_value)
+        : NaN;
+
+  if (!Number.isFinite(rawValue)) {
+    return null;
+  }
+
+  const unit = (row.frequency_unit || "Hz").toUpperCase();
+  const multiplier =
+    unit === "GHZ" ? 1_000_000_000 : unit === "MHZ" ? 1_000_000 : unit === "KHZ" ? 1_000 : 1;
+
+  const valueHz = rawValue * multiplier;
+  return {
+    valueHz,
+    label: `${rawValue} ${row.frequency_unit || "Hz"}`
+  } satisfies FrequencyCandidate;
+};
+
+const getRowMaxFrequency = (row: CatalogRow) => {
+  const structured = getStructuredMaxFrequency(row);
+  if (structured) {
+    return structured;
+  }
+
+  const combinedText = [
+    row.summary_zh || "",
+    row.summary_en || "",
+    JSON.stringify(row.raw_specs_json || {})
+  ].join(" ");
+
+  const candidates = extractFrequencyCandidatesFromText(combinedText);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return candidates.reduce((best, current) => (current.valueHz > best.valueHz ? current : best));
 };
 
 const buildCatalogPrompt = (
@@ -484,6 +577,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: message }, { status: 500 });
     } finally {
       clearTimeout(websiteTimeout);
+    }
+  }
+
+  if (isMaxFrequencyQuestion(text)) {
+    const rowCandidates = rows
+      .map((row) => ({
+        row,
+        frequency: getRowMaxFrequency(row)
+      }))
+      .filter(
+        (item): item is { row: CatalogRow; frequency: FrequencyCandidate } => Boolean(item.frequency)
+      );
+
+    if (rowCandidates.length > 0) {
+      const best = rowCandidates.reduce((currentBest, item) =>
+        item.frequency.valueHz > currentBest.frequency.valueHz ? item : currentBest
+      );
+
+      const seriesOrModels =
+        modelHints.length > 0 ? modelHints.join("、") : rows.map((row) => row.model).join("、");
+      const answer =
+        locale === "zh"
+          ? `${seriesOrModels} 目前可確認的最高頻率是 ${formatFrequencyFromHz(
+              best.frequency.valueHz
+            )}。`
+          : `The highest confirmed frequency for ${seriesOrModels} is ${formatFrequencyFromHz(
+              best.frequency.valueHz
+            )}.`;
+
+      return NextResponse.json({ text: answer });
     }
   }
 
