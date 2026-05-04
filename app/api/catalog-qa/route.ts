@@ -215,23 +215,52 @@ const extractModelCandidates = (text: string) => {
   return Array.from(new Set(normalized)).slice(0, 8);
 };
 
-const matchesCatalogRow = (row: CatalogRow, modelHints: string[]) => {
+const getCatalogRowMatchScore = (row: CatalogRow, modelHints: string[]) => {
   if (modelHints.length === 0) {
-    return true;
+    return 0;
   }
 
-  const haystack = [
+  const textFields = [
     row.model,
     row.product_name || "",
     row.category || "",
     row.summary_zh || "",
     row.summary_en || "",
     JSON.stringify(row.raw_specs_json || {})
-  ]
-    .join(" ")
-    .toUpperCase();
+  ].map((value) => value.toUpperCase());
 
-  return modelHints.some((hint) => haystack.includes(hint));
+  let bestScore = -1;
+
+  for (const hint of modelHints) {
+    const normalizedHint = hint.toUpperCase();
+    const model = row.model.toUpperCase();
+    const productName = (row.product_name || "").toUpperCase();
+
+    if (model === normalizedHint) {
+      bestScore = Math.max(bestScore, 100);
+      continue;
+    }
+
+    if (productName === normalizedHint || productName.endsWith(` ${normalizedHint}`)) {
+      bestScore = Math.max(bestScore, 95);
+      continue;
+    }
+
+    if (model.startsWith(normalizedHint) || productName.includes(normalizedHint)) {
+      bestScore = Math.max(bestScore, 80);
+      continue;
+    }
+
+    if (textFields.some((field) => field.includes(normalizedHint))) {
+      bestScore = Math.max(bestScore, 50);
+    }
+  }
+
+  return bestScore;
+};
+
+const matchesCatalogRow = (row: CatalogRow, modelHints: string[]) => {
+  return modelHints.length === 0 || getCatalogRowMatchScore(row, modelHints) >= 0;
 };
 
 const isMaxFrequencyQuestion = (text: string) =>
@@ -320,6 +349,89 @@ const getRowMaxFrequency = (row: CatalogRow) => {
   }
 
   return candidates.reduce((best, current) => (current.valueHz > best.valueHz ? current : best));
+};
+
+const getPrimaryMatchedRow = (rows: CatalogRow[], modelHints: string[]) => {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return [...rows].sort(
+    (a, b) => getCatalogRowMatchScore(b, modelHints) - getCatalogRowMatchScore(a, modelHints)
+  )[0];
+};
+
+const getSeriesRowsForPrimary = (
+  primaryRow: CatalogRow,
+  allRows: CatalogRow[],
+  seriesHint?: string
+) => {
+  if (!primaryRow.source_pdf_url) {
+    return [primaryRow];
+  }
+
+  const primaryModel = primaryRow.model.toUpperCase();
+  const normalizedHint = (seriesHint || primaryModel).toUpperCase();
+  const numericHint = normalizedHint.replace(/[^0-9]/g, "");
+  const prefix = (numericHint || primaryModel.replace(/[^0-9]/g, "")).slice(0, 2);
+  const hintSuffix = normalizedHint.match(/[A-Z]+$/)?.[0] || "";
+  const primarySuffix = primaryModel.match(/[A-Z]+$/)?.[0] || "";
+  const suffix = hintSuffix || primarySuffix;
+
+  const siblings = allRows.filter((row) => {
+    if (row.source_pdf_url !== primaryRow.source_pdf_url) {
+      return false;
+    }
+
+    const model = row.model.toUpperCase();
+    const modelDigits = model.replace(/[^0-9]/g, "");
+    const modelSuffix = model.match(/[A-Z]+$/)?.[0] || "";
+
+    if (prefix && !modelDigits.startsWith(prefix)) {
+      return false;
+    }
+
+    if (suffix && modelSuffix && modelSuffix !== suffix) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return siblings.length > 1 ? siblings : [primaryRow];
+};
+
+const formatSeriesFrequencyAnswer = (
+  locale: "zh" | "en",
+  seriesLabel: string,
+  seriesRows: CatalogRow[]
+) => {
+  const rowCandidates = seriesRows
+    .map((row) => ({
+      row,
+      frequency: getRowMaxFrequency(row)
+    }))
+    .filter(
+      (item): item is { row: CatalogRow; frequency: FrequencyCandidate } => Boolean(item.frequency)
+    );
+
+  if (rowCandidates.length === 0) {
+    return null;
+  }
+
+  const highest = rowCandidates.reduce((best, current) =>
+    current.frequency.valueHz > best.frequency.valueHz ? current : best
+  );
+
+  const variants = rowCandidates
+    .sort((a, b) => a.frequency.valueHz - b.frequency.valueHz)
+    .map((item) => `${item.row.model} ${formatFrequencyFromHz(item.frequency.valueHz)}`);
+
+  if (locale === "zh") {
+    return `${seriesLabel} 是一個系列，旗下包含 ${variants.join("、")}。目前最高到 ${highest.row.model} 的 ${formatFrequencyFromHz(highest.frequency.valueHz)}。`;
+  }
+
+  return `${seriesLabel} is a series that includes ${variants.join(", ")}. The highest variant currently identified is ${highest.row.model} at ${formatFrequencyFromHz(highest.frequency.valueHz)}.`;
 };
 
 const buildCatalogPrompt = (
@@ -456,8 +568,9 @@ export async function POST(request: Request) {
   const sql = neon(postgresUrl);
 
   let rows: CatalogRow[] = [];
+  let allRows: CatalogRow[] = [];
   try {
-    const allRows = (await sql`
+    allRows = (await sql`
       select
         id,
         brand,
@@ -483,6 +596,10 @@ export async function POST(request: Request) {
       modelHints.length > 0
         ? allRows
             .filter((row) => matchesCatalogRow(row, modelHints))
+            .sort(
+              (a, b) =>
+                getCatalogRowMatchScore(b, modelHints) - getCatalogRowMatchScore(a, modelHints)
+            )
             .slice(0, 8)
         : allRows.slice(0, 8);
   } catch (error) {
@@ -581,7 +698,27 @@ export async function POST(request: Request) {
   }
 
   if (isMaxFrequencyQuestion(text)) {
-    const rowCandidates = rows
+    const primaryRow = getPrimaryMatchedRow(rows, modelHints);
+    if (primaryRow && modelHints.length > 0) {
+      const seriesRows = getSeriesRowsForPrimary(primaryRow, allRows, modelHints[0]);
+      if (seriesRows.length > 1) {
+        const seriesAnswer = formatSeriesFrequencyAnswer(locale, modelHints[0], seriesRows);
+        if (seriesAnswer) {
+          return NextResponse.json({ text: seriesAnswer });
+        }
+      }
+    }
+
+    const bestMatchScore = rows.reduce(
+      (best, row) => Math.max(best, getCatalogRowMatchScore(row, modelHints)),
+      -1
+    );
+    const scopedRows =
+      bestMatchScore >= 0
+        ? rows.filter((row) => getCatalogRowMatchScore(row, modelHints) === bestMatchScore)
+        : rows;
+
+    const rowCandidates = scopedRows
       .map((row) => ({
         row,
         frequency: getRowMaxFrequency(row)
@@ -595,14 +732,16 @@ export async function POST(request: Request) {
         item.frequency.valueHz > currentBest.frequency.valueHz ? item : currentBest
       );
 
-      const seriesOrModels =
-        modelHints.length > 0 ? modelHints.join("、") : rows.map((row) => row.model).join("、");
+      const primaryLabel =
+        modelHints[0] ||
+        best.row.model ||
+        scopedRows.map((row) => row.model).join("、");
       const answer =
         locale === "zh"
-          ? `${seriesOrModels} 目前可確認的最高頻率是 ${formatFrequencyFromHz(
+          ? `${primaryLabel} 目前可確認的最高頻率是 ${formatFrequencyFromHz(
               best.frequency.valueHz
             )}。`
-          : `The highest confirmed frequency for ${seriesOrModels} is ${formatFrequencyFromHz(
+          : `The highest confirmed frequency for ${primaryLabel} is ${formatFrequencyFromHz(
               best.frequency.valueHz
             )}.`;
 

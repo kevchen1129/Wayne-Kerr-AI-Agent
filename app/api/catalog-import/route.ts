@@ -83,6 +83,18 @@ const extractFirstJson = (text: string) => {
 
 const normalizeModelHint = (value: string) => value.replace(/[^A-Z0-9-]/gi, "").toUpperCase();
 
+const extractModelHintsFromPdfUrl = (pdfUrl: string) => {
+  try {
+    const pathname = new URL(pdfUrl).pathname;
+    const filename = pathname.split("/").pop() || "";
+    const basename = filename.replace(/\.pdf$/i, "");
+    const candidate = normalizeModelHint(basename);
+    return candidate.length >= 4 ? [candidate] : [];
+  } catch {
+    return [];
+  }
+};
+
 const extractModelHintsFromPdfText = (pdfText: string) => {
   const hintSet = new Set<string>();
 
@@ -103,6 +115,9 @@ const extractModelHintsFromPdfText = (pdfText: string) => {
 
   return Array.from(hintSet).slice(0, 24);
 };
+
+const modelMatchesHint = (model: string, hint: string) =>
+  model === hint || model.includes(hint) || hint.includes(model);
 
 const buildImportPrompt = (
   locale: "zh" | "en",
@@ -226,6 +241,41 @@ const normalizeProducts = (value: unknown): NormalizedCatalogProduct[] => {
   }
 
   return Array.from(deduped.values());
+};
+
+const reconcileProductsWithHints = (
+  products: NormalizedCatalogProduct[],
+  modelHints: string[]
+) => {
+  if (products.length === 0 || modelHints.length === 0) {
+    return products;
+  }
+
+  const matched = products.filter(
+    (product) =>
+      product.model &&
+      modelHints.some((hint) => modelMatchesHint(product.model || "", hint))
+  );
+
+  if (matched.length > 0) {
+    return matched;
+  }
+
+  if (products.length === 1 && modelHints.length === 1) {
+    const forcedModel = modelHints[0];
+    return [
+      {
+        ...products[0],
+        model: forcedModel,
+        product_name:
+          products[0].product_name && !products[0].product_name.includes(products[0].model || "")
+            ? products[0].product_name
+            : `Wayne Kerr ${forcedModel}`
+      }
+    ];
+  }
+
+  return products;
 };
 
 const ensureDomMatrixPolyfill = async () => {
@@ -404,7 +454,9 @@ export async function POST(request: Request) {
 
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
     const pdfText = await extractPdfText(pdfBuffer);
-    const modelHints = extractModelHintsFromPdfText(pdfText);
+    const modelHints = Array.from(
+      new Set([...extractModelHintsFromPdfUrl(pdfUrl), ...extractModelHintsFromPdfText(pdfText)])
+    );
 
     if (!pdfText) {
       return NextResponse.json(
@@ -449,7 +501,7 @@ export async function POST(request: Request) {
     const aiData = await aiResponse.json();
     const outputText = extractOutputText(aiData);
     const parsed = outputText ? extractFirstJson(outputText) : null;
-    let products = normalizeProducts(parsed);
+    let products = reconcileProductsWithHints(normalizeProducts(parsed), modelHints);
 
     if (modelHints.length > 1 && products.length < Math.min(modelHints.length, 3)) {
       const retryResponse = await fetch(`${BASE_URL}/responses`, {
@@ -483,7 +535,7 @@ export async function POST(request: Request) {
         const retryData = await retryResponse.json();
         const retryText = extractOutputText(retryData);
         const retryParsed = retryText ? extractFirstJson(retryText) : null;
-        const retryProducts = normalizeProducts(retryParsed);
+        const retryProducts = reconcileProductsWithHints(normalizeProducts(retryParsed), modelHints);
         if (retryProducts.length > products.length) {
           products = retryProducts;
         }
