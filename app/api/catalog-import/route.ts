@@ -24,6 +24,20 @@ type ParsedCatalogProduct = {
   raw_specs_json?: Record<string, unknown>;
 };
 
+type NormalizedCatalogProduct = {
+  model: string | undefined;
+  product_name: string | null;
+  category: string | null;
+  min_frequency_value: number | null;
+  max_frequency_value: number | null;
+  frequency_unit: string | null;
+  measurement_functions: string[];
+  dc_bias_support: boolean | null;
+  summary_zh: string | null;
+  summary_en: string | null;
+  raw_specs_json: Record<string, unknown>;
+};
+
 const BASE_URL = "https://api.x.ai/v1";
 const DEFAULT_MODEL = "grok-4.20-beta-0309-reasoning";
 const TIMEOUT_MS = 180000;
@@ -67,19 +81,52 @@ const extractFirstJson = (text: string) => {
   }
 };
 
-const buildImportPrompt = (locale: "zh" | "en", pdfUrl: string, pdfText: string) => {
+const normalizeModelHint = (value: string) => value.replace(/[^A-Z0-9-]/gi, "").toUpperCase();
+
+const extractModelHintsFromPdfText = (pdfText: string) => {
+  const hintSet = new Set<string>();
+
+  const patterns = [
+    /\b\d[A-Z]{2,}\d{3,}[A-Z0-9-]*\b/g,
+    /\b[A-Z]{0,3}\d{3,5}[A-Z]{0,3}\b/g,
+    /Wayne\s+Kerr\s+([A-Z0-9-]{4,})/gi
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of pdfText.matchAll(pattern)) {
+      const candidate = normalizeModelHint(match[1] || match[0] || "");
+      if (candidate.length >= 4) {
+        hintSet.add(candidate);
+      }
+    }
+  }
+
+  return Array.from(hintSet).slice(0, 24);
+};
+
+const buildImportPrompt = (
+  locale: "zh" | "en",
+  pdfUrl: string,
+  pdfText: string,
+  modelHints: string[]
+) => {
   const truncatedText = pdfText.slice(0, 18000);
+  const modelHintLine =
+    modelHints.length > 0 ? `Possible model / fixture codes found in PDF: ${modelHints.join(", ")}` : "";
   if (locale === "zh") {
     return [
       "你是 Wayne Kerr 型錄匯入助理。",
       "請從提供的 PDF 文字中抽取可匯入 catalog_products 的產品資料。",
       "只輸出 JSON，不要 Markdown，不要額外說明。",
-      "若 PDF 主要描述單一產品，products 陣列只放 1 筆。",
+      "如果 PDF 中出現多個不同型號、fixture、accessory 或 option code，products 陣列必須拆成多筆，一個型號一筆。",
+      "不要把多個型號合併成單一系列摘要列；即使它們同屬一個 family，也要逐一輸出。",
       "如果某欄沒有明確資訊，請填 null 或空陣列，不要捏造。",
       "summary_zh 必須是繁體中文；summary_en 必須是英文。",
       "measurement_functions 請盡量用短縮寫，例如 L, C, R, Z, Q, D, ESR。",
       "dc_bias_support 若文件沒明寫，填 null。",
+      "若是治具、fixture、accessory、test lead、adapter，category 請填 Fixture 或 Accessory，不要誤分類成儀器。",
       `source_pdf_url: ${pdfUrl}`,
+      modelHintLine,
       `PDF text:\n${truncatedText}`,
       `Schema:
 {
@@ -109,12 +156,15 @@ const buildImportPrompt = (locale: "zh" | "en", pdfUrl: string, pdfText: string)
     "You are a Wayne Kerr catalog import assistant.",
     "Extract catalog_products-ready product records from the provided PDF text.",
     "Output JSON only, no Markdown and no extra explanation.",
-    "If the PDF mainly describes one product, return a single item in products.",
+    "If the PDF contains multiple distinct models, fixtures, accessories, or option codes, products must contain multiple items, one model per item.",
+    "Do not collapse multiple models into a single family-level summary row, even if they belong to one family.",
     "If a field is not explicit, use null or an empty array and do not invent values.",
     "summary_zh must be Traditional Chinese; summary_en must be English.",
     "Use short abbreviations for measurement_functions when possible, such as L, C, R, Z, Q, D, ESR.",
     "If DC bias support is not clearly stated, set dc_bias_support to null.",
+    "For fixtures, accessories, test leads, or adapters, set category to Fixture or Accessory instead of treating them as instruments.",
     `source_pdf_url: ${pdfUrl}`,
+    modelHintLine,
     `PDF text:\n${truncatedText}`,
     `Schema:
 {
@@ -140,17 +190,17 @@ const buildImportPrompt = (locale: "zh" | "en", pdfUrl: string, pdfText: string)
   ].join("\n");
 };
 
-const normalizeProducts = (value: unknown) => {
+const normalizeProducts = (value: unknown): NormalizedCatalogProduct[] => {
   if (!value || typeof value !== "object") return [];
   const products = Array.isArray((value as { products?: unknown }).products)
     ? ((value as { products?: unknown }).products as unknown[])
     : [];
-  return products
+  const normalized = products
     .filter((item): item is ParsedCatalogProduct => Boolean(item) && typeof item === "object")
     .filter((item) => typeof item.model === "string" && item.model.trim().length > 0)
     .map((item) => ({
-      model: item.model?.trim(),
-      product_name: item.product_name?.trim() || item.model?.trim(),
+      model: item.model?.trim()?.toUpperCase(),
+      product_name: item.product_name?.trim() || item.model?.trim() || null,
       category: item.category?.trim() || null,
       min_frequency_value:
         typeof item.min_frequency_value === "number" ? item.min_frequency_value : null,
@@ -167,6 +217,15 @@ const normalizeProducts = (value: unknown) => {
       raw_specs_json:
         item.raw_specs_json && typeof item.raw_specs_json === "object" ? item.raw_specs_json : {}
     }));
+
+  const deduped = new Map<string, NormalizedCatalogProduct>();
+  for (const product of normalized) {
+    const key = product.model || "";
+    if (!key) continue;
+    deduped.set(key, product);
+  }
+
+  return Array.from(deduped.values());
 };
 
 const ensureDomMatrixPolyfill = async () => {
@@ -345,6 +404,7 @@ export async function POST(request: Request) {
 
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
     const pdfText = await extractPdfText(pdfBuffer);
+    const modelHints = extractModelHintsFromPdfText(pdfText);
 
     if (!pdfText) {
       return NextResponse.json(
@@ -369,7 +429,7 @@ export async function POST(request: Request) {
         input: [
           {
             role: "system",
-            content: [{ type: "input_text", text: buildImportPrompt(locale, pdfUrl, pdfText) }]
+            content: [{ type: "input_text", text: buildImportPrompt(locale, pdfUrl, pdfText, modelHints) }]
           }
         ],
         store: false,
@@ -389,7 +449,46 @@ export async function POST(request: Request) {
     const aiData = await aiResponse.json();
     const outputText = extractOutputText(aiData);
     const parsed = outputText ? extractFirstJson(outputText) : null;
-    const products = normalizeProducts(parsed);
+    let products = normalizeProducts(parsed);
+
+    if (modelHints.length > 1 && products.length < Math.min(modelHints.length, 3)) {
+      const retryResponse = await fetch(`${BASE_URL}/responses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: process.env.XAI_MODEL || DEFAULT_MODEL,
+          input: [
+            {
+              role: "system",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    buildImportPrompt(locale, pdfUrl, pdfText, modelHints) +
+                    "\nIMPORTANT: The PDF appears to contain multiple distinct model or fixture codes. You must output one products item per distinct code if that code corresponds to a separate item."
+                }
+              ]
+            }
+          ],
+          store: false,
+          temperature: 0
+        }),
+        signal: controller.signal
+      });
+
+      if (retryResponse.ok) {
+        const retryData = await retryResponse.json();
+        const retryText = extractOutputText(retryData);
+        const retryParsed = retryText ? extractFirstJson(retryText) : null;
+        const retryProducts = normalizeProducts(retryParsed);
+        if (retryProducts.length > products.length) {
+          products = retryProducts;
+        }
+      }
+    }
 
     if (products.length === 0) {
       return NextResponse.json(
