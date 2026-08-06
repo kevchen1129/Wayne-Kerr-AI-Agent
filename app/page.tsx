@@ -9,6 +9,7 @@ import type {
   ComposerDraft,
   DUTResult,
   GraphResult,
+  ImportedMeasurementSession,
   LocalImage,
   Message,
   Thread,
@@ -20,6 +21,65 @@ const makeId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
+
+const buildImportedSessionMessages = (
+  session: ImportedMeasurementSession,
+  locale: "zh" | "en"
+): Message[] => {
+  const nowStamp = new Date().toISOString();
+  const importedImages = session.files.filter((file) => file.kind === "image" && file.dataUrl);
+  const imageMessages: Message[] = importedImages.map((file) => ({
+    id: makeId(),
+    role: "user",
+    type: "image",
+    imageUrl: file.dataUrl!,
+    caption: session.question || file.name,
+    mode: session.mode,
+    createdAt: nowStamp
+  }));
+
+  const tableFiles = session.files.filter((file) => file.tablePreview || file.note);
+  const tableSummary = tableFiles
+    .map((file) => {
+      if (file.tablePreview) {
+        return locale === "zh"
+          ? `- ${file.name}：欄位 ${file.tablePreview.columns.join("、")}`
+          : `- ${file.name}: columns ${file.tablePreview.columns.join(", ")}`;
+      }
+      return `- ${file.name}: ${file.note}`;
+    })
+    .join("\n");
+
+  const summaryText =
+    locale === "zh"
+      ? [
+          session.summaryText,
+          session.question ? `預設需求：${session.question}` : null,
+          tableSummary ? `已匯入的表格資料：\n${tableSummary}` : null,
+          "你現在可以直接追問，例如：這個等效電路代表什麼？工作頻率該怎麼抓？"
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+      : [
+          session.summaryText,
+          session.question ? `Requested analysis: ${session.question}` : null,
+          tableSummary ? `Imported table data:\n${tableSummary}` : null,
+          "You can now ask follow-up questions directly, for example: what equivalent circuit fits this sweep, or what working frequency range is safe?"
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+
+  return [
+    ...imageMessages,
+    {
+      id: makeId(),
+      role: "assistant",
+      type: "text",
+      text: summaryText,
+      createdAt: nowStamp
+    }
+  ];
+};
 
 const MAX_IMAGE_DIM = 1600;
 const JPEG_QUALITY = 0.85;
@@ -559,7 +619,9 @@ export default function Home() {
   const [typingHasImageByThread, setTypingHasImageByThread] = useState<Record<string, boolean>>({});
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [lastImageByThread, setLastImageByThread] = useState<Record<string, string>>({});
+  const [threadContextByThread, setThreadContextByThread] = useState<Record<string, string>>({});
   const typingTimersRef = useRef<Record<string, number>>({});
+  const importedSessionIdsRef = useRef<Set<string>>(new Set());
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
   const validation = useMemo(() => {
@@ -642,6 +704,74 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const importSessionId = url.searchParams.get("importSession");
+    if (!importSessionId || importedSessionIdsRef.current.has(importSessionId)) {
+      return;
+    }
+
+    importedSessionIdsRef.current.add(importSessionId);
+
+    const loadImportedSession = async () => {
+      try {
+        const response = await fetch(`/api/import-session/${encodeURIComponent(importSessionId)}`);
+        if (!response.ok) {
+          throw new Error(`Import session load failed (${response.status}).`);
+        }
+
+        const payload = (await response.json()) as { session?: ImportedMeasurementSession };
+        const session = payload.session;
+        if (!session) {
+          throw new Error("Import session payload is empty.");
+        }
+
+        const threadId = `thread-import-${session.id}`;
+        const nowStamp = new Date().toISOString();
+        const nextThread: Thread = {
+          id: threadId,
+          title: session.question || (locale === "zh" ? "匯入量測資料" : "Imported measurement"),
+          mode: session.mode,
+          updatedAt: nowStamp
+        };
+
+        setThreads((prev) => [nextThread, ...prev.filter((thread) => thread.id !== threadId)]);
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [threadId]: buildImportedSessionMessages(session, locale)
+        }));
+        setThreadContextByThread((prev) => ({
+          ...prev,
+          [threadId]: session.contextText
+        }));
+
+        const latestImage = session.files
+          .filter((file) => file.kind === "image" && file.dataUrl)
+          .map((file) => file.dataUrl as string)
+          .pop();
+        if (latestImage) {
+          setLastImageByThread((prev) => ({ ...prev, [threadId]: latestImage }));
+        }
+
+        setActiveThreadId(threadId);
+        setDraft((prev) => ({
+          ...prev,
+          text: "",
+          images: [],
+          mode: session.mode
+        }));
+
+        url.searchParams.delete("importSession");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      } catch (error) {
+        console.error("Failed to load imported session:", error);
+      }
+    };
+
+    void loadImportedSession();
+  }, [locale]);
+
   const updateThreadMeta = (threadId: string, textSample?: string) => {
     setThreads((prev) => {
       const updated = prev.map((thread) => {
@@ -705,6 +835,16 @@ export default function Home() {
   const handleDeleteThread = (id: string) => {
     setThreads((prev) => prev.filter((t) => t.id !== id));
     setMessagesByThread((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setLastImageByThread((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setThreadContextByThread((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
@@ -853,6 +993,10 @@ export default function Home() {
           role: message.role,
           text: typeof message.text === "string" ? message.text : message.text[locale] ?? ""
         }));
+      const threadContext = threadContextByThread[threadId]?.trim();
+      const historyWithContext = threadContext
+        ? [{ role: "assistant" as const, text: threadContext }, ...history]
+        : history;
 
       const imagePayload =
         mode === "catalog_qa"
@@ -911,7 +1055,7 @@ export default function Home() {
           mode,
           locale,
           textOnly: !hasImage,
-          history
+          history: historyWithContext
         })
       });
 

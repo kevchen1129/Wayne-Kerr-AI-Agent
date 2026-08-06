@@ -177,3 +177,29 @@ export type ComposerDraft = {
   images: LocalImage[];
   mode: AnalysisMode;
 };
+
+export type ImportedMeasurementFile = {
+  id: string;
+  name: string;
+  kind: "image" | "csv" | "spreadsheet";
+  mimeType: string;
+  sizeBytes: number;
+  dataUrl?: string;
+  textPreview?: string;
+  tablePreview?: {
+    columns: string[];
+    rows: Array<Record<string, string>>;
+  };
+  note?: string;
+};
+
+export type ImportedMeasurementSession = {
+  id: string;
+  mode: AnalysisMode;
+  sourceApp?: string;
+  question?: string;
+  summaryText: string;
+  contextText: string;
+  files: ImportedMeasurementFile[];
+  createdAt: string;
+};
