@@ -25,8 +25,8 @@ type CatalogRow = {
   raw_specs_json: unknown;
 };
 
-const BASE_URL = "https://api.x.ai/v1";
-const DEFAULT_MODEL = "grok-4.20-beta-0309-reasoning";
+const BASE_URL = "https://api.deepseek.com";
+const DEFAULT_MODEL = "deepseek-v4-pro";
 const TIMEOUT_MS = 120000;
 const OFFICIAL_SITE_BASE = "https://www.waynekerr.com";
 const OFFICIAL_INSTRUMENTS_URL = `${OFFICIAL_SITE_BASE}/en-GB/products/instruments`;
@@ -34,12 +34,37 @@ const OFFICIAL_INSTRUMENTS_URL = `${OFFICIAL_SITE_BASE}/en-GB/products/instrumen
 const extractOutputText = (data: unknown) => {
   if (!data || typeof data !== "object") return "";
   const record = data as Record<string, unknown>;
+
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const firstChoice = choices[0] as { message?: { content?: unknown } } | undefined;
+  const messageContent = firstChoice?.message?.content;
+
+  if (typeof messageContent === "string" && messageContent.trim()) {
+    return messageContent.trim();
+  }
+
+  if (Array.isArray(messageContent)) {
+    const chunks = messageContent
+      .map((part) => {
+        if (!part || typeof part !== "object") return "";
+        const partRecord = part as { type?: unknown; text?: unknown };
+        return partRecord.type === "text" && typeof partRecord.text === "string"
+          ? partRecord.text
+          : "";
+      })
+      .filter(Boolean);
+
+    if (chunks.length > 0) {
+      return chunks.join("\n").trim();
+    }
+  }
+
   if (typeof record.output_text === "string" && record.output_text.trim()) {
     return record.output_text;
   }
 
   const output = Array.isArray(record.output) ? record.output : [];
-  const chunks: string[] = [];
+  const legacyChunks: string[] = [];
   for (const item of output) {
     if (!item || typeof item !== "object") continue;
     const content = Array.isArray((item as { content?: unknown }).content)
@@ -49,12 +74,13 @@ const extractOutputText = (data: unknown) => {
       if (!part || typeof part !== "object") continue;
       const partRecord = part as { type?: unknown; text?: unknown };
       if (partRecord.type === "output_text" && typeof partRecord.text === "string") {
-        chunks.push(partRecord.text);
+        legacyChunks.push(partRecord.text);
       }
     }
   }
 
-  return chunks.join("\n").trim();
+  return legacyChunks.join("
+").trim();
 };
 
 const sanitizeCatalogAnswer = (text: string, locale: "zh" | "en") => {
@@ -535,7 +561,7 @@ const formatNoDataMessage = (locale: "zh" | "en", modelHints: string[]) => {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   const postgresUrl = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
 
   if (!postgresUrl) {
@@ -631,8 +657,8 @@ export async function POST(request: Request) {
     if (!apiKey) {
       const fallback =
         locale === "zh"
-          ? "資料庫沒有命中，但已從 Wayne Kerr 官網找到相關頁面；目前未設定 XAI_API_KEY，因此無法整理成自然語言答案。"
-          : "The database had no match, but relevant Wayne Kerr website pages were found. XAI_API_KEY is not configured, so I cannot summarize them into a natural-language answer yet.";
+          ? "資料庫沒有命中，但已從 Wayne Kerr 官網找到相關頁面；目前未設定 DEEPSEEK_API_KEY，因此無法整理成自然語言答案。"
+          : "The database had no match, but relevant Wayne Kerr website pages were found. DEEPSEEK_API_KEY is not configured, so I cannot summarize them into a natural-language answer yet.";
       return NextResponse.json({ text: fallback });
     }
 
@@ -640,30 +666,24 @@ export async function POST(request: Request) {
     const websiteTimeout = setTimeout(() => websiteController.abort(), TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${BASE_URL}/responses`, {
+      const response = await fetch(`${BASE_URL}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: process.env.XAI_MODEL || DEFAULT_MODEL,
-          input: [
+          model: process.env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+          messages: [
             {
               role: "system",
-              content: [
-                {
-                  type: "input_text",
-                  text: buildOfficialFallbackPrompt(locale, text, officialSnippets, history)
-                }
-              ]
+              content: buildOfficialFallbackPrompt(locale, text, officialSnippets, history)
             },
             {
               role: "user",
-              content: [{ type: "input_text", text }]
+              content: text
             }
           ],
-          store: false,
           temperature: 0
         }),
         signal: websiteController.signal
@@ -672,7 +692,7 @@ export async function POST(request: Request) {
       if (!response.ok) {
         const errorText = await response.text();
         return NextResponse.json(
-          { error: errorText || `xAI request failed (${response.status}).` },
+          { error: errorText || `DeepSeek request failed (${response.status}).` },
           { status: response.status }
         );
       }
@@ -752,8 +772,8 @@ export async function POST(request: Request) {
   if (!apiKey) {
     const fallback =
       locale === "zh"
-        ? `已找到 ${rows.map((row) => row.model).join("、")} 的產品資料，但目前未設定 XAI_API_KEY，所以只能先確認資料已連上。`
-        : `I found catalog records for ${rows.map((row) => row.model).join(", ")}, but XAI_API_KEY is not configured, so I can only confirm the data connection for now.`;
+        ? `已找到 ${rows.map((row) => row.model).join("、")} 的產品資料，但目前未設定 DEEPSEEK_API_KEY，所以只能先確認資料已連上。`
+        : `I found catalog records for ${rows.map((row) => row.model).join(", ")}, but DEEPSEEK_API_KEY is not configured, so I can only confirm the data connection for now.`;
     return NextResponse.json({ text: fallback });
   }
 
@@ -761,25 +781,24 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${BASE_URL}/responses`, {
+    const response = await fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: process.env.XAI_MODEL || DEFAULT_MODEL,
-        input: [
+        model: process.env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+        messages: [
           {
             role: "system",
-            content: [{ type: "input_text", text: buildCatalogPrompt(locale, text, rows, history) }]
+            content: buildCatalogPrompt(locale, text, rows, history)
           },
           {
             role: "user",
-            content: [{ type: "input_text", text }]
+            content: text
           }
         ],
-        store: false,
         temperature: 0
       }),
       signal: controller.signal
@@ -788,7 +807,7 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json(
-        { error: errorText || `xAI request failed (${response.status}).` },
+        { error: errorText || `DeepSeek request failed (${response.status}).` },
         { status: response.status }
       );
     }

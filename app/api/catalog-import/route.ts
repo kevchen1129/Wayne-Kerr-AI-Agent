@@ -38,20 +38,45 @@ type NormalizedCatalogProduct = {
   raw_specs_json: Record<string, unknown>;
 };
 
-const BASE_URL = "https://api.x.ai/v1";
-const DEFAULT_MODEL = "grok-4.20-beta-0309-reasoning";
+const BASE_URL = "https://api.deepseek.com";
+const DEFAULT_MODEL = "deepseek-v4-pro";
 const TIMEOUT_MS = 180000;
 const PDF_URL_REGEX = /(https?:\/\/[^\s]+\.pdf(?:\?[^\s]*)?)/i;
 
 const extractOutputText = (data: unknown) => {
   if (!data || typeof data !== "object") return "";
   const record = data as Record<string, unknown>;
+
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const firstChoice = choices[0] as { message?: { content?: unknown } } | undefined;
+  const messageContent = firstChoice?.message?.content;
+
+  if (typeof messageContent === "string" && messageContent.trim()) {
+    return messageContent.trim();
+  }
+
+  if (Array.isArray(messageContent)) {
+    const chunks = messageContent
+      .map((part) => {
+        if (!part || typeof part !== "object") return "";
+        const partRecord = part as { type?: unknown; text?: unknown };
+        return partRecord.type === "text" && typeof partRecord.text === "string"
+          ? partRecord.text
+          : "";
+      })
+      .filter(Boolean);
+
+    if (chunks.length > 0) {
+      return chunks.join("\n").trim();
+    }
+  }
+
   if (typeof record.output_text === "string" && record.output_text.trim()) {
     return record.output_text;
   }
 
   const output = Array.isArray(record.output) ? record.output : [];
-  const chunks: string[] = [];
+  const legacyChunks: string[] = [];
   for (const item of output) {
     if (!item || typeof item !== "object") continue;
     const content = Array.isArray((item as { content?: unknown }).content)
@@ -61,12 +86,13 @@ const extractOutputText = (data: unknown) => {
       if (!part || typeof part !== "object") continue;
       const partRecord = part as { type?: unknown; text?: unknown };
       if (partRecord.type === "output_text" && typeof partRecord.text === "string") {
-        chunks.push(partRecord.text);
+        legacyChunks.push(partRecord.text);
       }
     }
   }
 
-  return chunks.join("\n").trim();
+  return legacyChunks.join("
+").trim();
 };
 
 const extractFirstJson = (text: string) => {
@@ -399,11 +425,11 @@ const extractPdfText = async (pdfBuffer: Buffer) => {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   const postgresUrl = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
 
   if (!apiKey) {
-    return NextResponse.json({ error: "Missing XAI_API_KEY." }, { status: 500 });
+    return NextResponse.json({ error: "Missing DEEPSEEK_API_KEY." }, { status: 500 });
   }
   if (!postgresUrl) {
     return NextResponse.json(
@@ -470,21 +496,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const aiResponse = await fetch(`${BASE_URL}/responses`, {
+    const aiResponse = await fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: process.env.XAI_MODEL || DEFAULT_MODEL,
-        input: [
+        model: process.env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+        messages: [
           {
             role: "system",
-            content: [{ type: "input_text", text: buildImportPrompt(locale, pdfUrl, pdfText, modelHints) }]
+            content: buildImportPrompt(locale, pdfUrl, pdfText, modelHints)
           }
         ],
-        store: false,
+        response_format: { type: "json_object" },
         temperature: 0
       }),
       signal: controller.signal
@@ -493,7 +519,7 @@ export async function POST(request: Request) {
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       return NextResponse.json(
-        { error: errorText || `xAI request failed (${aiResponse.status}).` },
+        { error: errorText || `DeepSeek request failed (${aiResponse.status}).` },
         { status: aiResponse.status }
       );
     }
@@ -504,28 +530,23 @@ export async function POST(request: Request) {
     let products = reconcileProductsWithHints(normalizeProducts(parsed), modelHints);
 
     if (modelHints.length > 1 && products.length < Math.min(modelHints.length, 3)) {
-      const retryResponse = await fetch(`${BASE_URL}/responses`, {
+      const retryResponse = await fetch(`${BASE_URL}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: process.env.XAI_MODEL || DEFAULT_MODEL,
-          input: [
+          model: process.env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+          messages: [
             {
               role: "system",
-              content: [
-                {
-                  type: "input_text",
-                  text:
-                    buildImportPrompt(locale, pdfUrl, pdfText, modelHints) +
-                    "\nIMPORTANT: The PDF appears to contain multiple distinct model or fixture codes. You must output one products item per distinct code if that code corresponds to a separate item."
-                }
-              ]
+              content:
+                buildImportPrompt(locale, pdfUrl, pdfText, modelHints) +
+                "\nIMPORTANT: The PDF appears to contain multiple distinct model or fixture codes. You must output one products item per distinct code if that code corresponds to a separate item."
             }
           ],
-          store: false,
+          response_format: { type: "json_object" },
           temperature: 0
         }),
         signal: controller.signal
