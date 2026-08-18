@@ -79,8 +79,7 @@ const extractOutputText = (data: unknown) => {
     }
   }
 
-  return legacyChunks.join("
-").trim();
+  return legacyChunks.join("\n").trim();
 };
 
 const sanitizeCatalogAnswer = (text: string, locale: "zh" | "en") => {

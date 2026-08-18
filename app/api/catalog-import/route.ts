@@ -91,8 +91,7 @@ const extractOutputText = (data: unknown) => {
     }
   }
 
-  return legacyChunks.join("
-").trim();
+  return legacyChunks.join("\n").trim();
 };
 
 const extractFirstJson = (text: string) => {
