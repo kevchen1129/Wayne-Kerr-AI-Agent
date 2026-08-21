@@ -25,6 +25,19 @@ type CatalogRow = {
   raw_specs_json: unknown;
 };
 
+type CatalogDocumentRow = {
+  id: number;
+  title: string;
+  doc_type: string;
+  language: string;
+  related_models: string[] | null;
+  source_pdf_url: string;
+  content_text: string;
+  summary_zh: string | null;
+  summary_en: string | null;
+  tags: string[] | null;
+};
+
 const BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-v4-pro";
 const TIMEOUT_MS = 120000;
@@ -288,6 +301,34 @@ const matchesCatalogRow = (row: CatalogRow, modelHints: string[]) => {
   return modelHints.length === 0 || getCatalogRowMatchScore(row, modelHints) >= 0;
 };
 
+const getCatalogDocumentMatchScore = (document: CatalogDocumentRow, modelHints: string[]) => {
+  if (modelHints.length === 0) return 0;
+
+  const relatedModels = (document.related_models || []).map((model) => model.toUpperCase());
+  const searchable = [
+    document.title,
+    document.doc_type,
+    document.summary_zh || "",
+    document.summary_en || "",
+    ...(document.tags || [])
+  ]
+    .join(" ")
+    .toUpperCase();
+
+  let bestScore = -1;
+  for (const hint of modelHints) {
+    const normalizedHint = hint.toUpperCase();
+    if (relatedModels.includes(normalizedHint)) {
+      bestScore = Math.max(bestScore, 100);
+    } else if (relatedModels.some((model) => model.startsWith(normalizedHint) || normalizedHint.startsWith(model))) {
+      bestScore = Math.max(bestScore, 85);
+    } else if (searchable.includes(normalizedHint)) {
+      bestScore = Math.max(bestScore, 50);
+    }
+  }
+  return bestScore;
+};
+
 const isMaxFrequencyQuestion = (text: string) =>
   /(最高頻率|最大頻率|頻率上限|max(?:imum)? frequency|highest frequency|frequency limit)/i.test(
     text
@@ -463,9 +504,18 @@ const buildCatalogPrompt = (
   locale: "zh" | "en",
   question: string,
   records: CatalogRow[],
+  documents: CatalogDocumentRow[],
   history: Array<{ role: "user" | "assistant"; text: string }>
 ) => {
   const serializedRecords = JSON.stringify(records, null, 2);
+  const serializedDocuments = JSON.stringify(
+    documents.map((document) => ({
+      ...document,
+      content_text: document.content_text.slice(0, 14000)
+    })),
+    null,
+    2
+  );
   const recentHistory = history
     .slice(-4)
     .map((item) => `${item.role}: ${item.text}`)
@@ -473,7 +523,8 @@ const buildCatalogPrompt = (
   if (locale === "zh") {
     return [
       "你是 Wayne Kerr 產品目錄問答助理。",
-      "你只能根據提供的 catalog_records 回答，不可以捏造不存在的規格。",
+      "你只能根據提供的 catalog_records 與 catalog_documents 回答，不可以捏造不存在的規格。",
+      "catalog_records 是產品規格；catalog_documents 是操作手冊、治具與附件文件，可用來回答設定、相容性、應用與量測限制。",
       "所有回覆都必須使用繁體中文；型號、單位、參數縮寫可以保留英文。",
       "如果資料表裡沒有明確寫出答案，請直接說目前已上傳的型錄資料沒有這個欄位。",
       "若能回答，優先直接回答問題，再用 2–4 點條列補充相關規格。",
@@ -481,7 +532,8 @@ const buildCatalogPrompt = (
       "不要使用 Markdown 粗體、星號標記或 ** 符號。",
       recentHistory ? `最近對話：\n${recentHistory}` : "",
       `使用者問題：${question}`,
-      `catalog_records:\n${serializedRecords}`
+      `catalog_records:\n${serializedRecords}`,
+      `catalog_documents:\n${serializedDocuments}`
     ]
       .filter(Boolean)
       .join("\n");
@@ -489,7 +541,8 @@ const buildCatalogPrompt = (
 
   return [
     "You are a Wayne Kerr catalog Q&A assistant.",
-    "Answer strictly from the provided catalog_records and do not invent missing specs.",
+    "Answer strictly from the provided catalog_records and catalog_documents and do not invent missing specs.",
+    "catalog_records contain product specifications. catalog_documents contain manuals, fixture documents, and accessory documents for setup, compatibility, applications, and measurement limits.",
     "All human-readable output must be in English only.",
     "If the answer is not explicitly present in the records, say that the uploaded catalog data does not currently contain that field.",
     "When possible, answer directly first, then add 2–4 short bullets with supporting specs.",
@@ -497,7 +550,8 @@ const buildCatalogPrompt = (
     "Do not use Markdown bold or ** markers.",
     recentHistory ? `Recent conversation:\n${recentHistory}` : "",
     `User question: ${question}`,
-    `catalog_records:\n${serializedRecords}`
+    `catalog_records:\n${serializedRecords}`,
+    `catalog_documents:\n${serializedDocuments}`
   ]
     .filter(Boolean)
     .join("\n");
@@ -594,6 +648,8 @@ export async function POST(request: Request) {
 
   let rows: CatalogRow[] = [];
   let allRows: CatalogRow[] = [];
+  let allDocuments: CatalogDocumentRow[] = [];
+  let documents: CatalogDocumentRow[] = [];
   try {
     allRows = (await sql`
       select
@@ -617,6 +673,23 @@ export async function POST(request: Request) {
       limit 50
     `) as CatalogRow[];
 
+    allDocuments = (await sql`
+      select
+        id,
+        title,
+        doc_type,
+        language,
+        related_models,
+        source_pdf_url,
+        content_text,
+        summary_zh,
+        summary_en,
+        tags
+      from catalog_documents
+      order by updated_at desc
+      limit 30
+    `) as CatalogDocumentRow[];
+
     rows =
       modelHints.length > 0
         ? allRows
@@ -627,20 +700,35 @@ export async function POST(request: Request) {
             )
             .slice(0, 8)
         : allRows.slice(0, 8);
+
+    documents =
+      modelHints.length > 0
+        ? allDocuments
+            .filter((document) => getCatalogDocumentMatchScore(document, modelHints) >= 0)
+            .sort(
+              (a, b) =>
+                getCatalogDocumentMatchScore(b, modelHints) -
+                getCatalogDocumentMatchScore(a, modelHints)
+            )
+            .slice(0, 4)
+        : allDocuments.slice(0, 4);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Database query failed.";
+    const missingDocumentTable = /catalog_documents.*does not exist/i.test(message);
     return NextResponse.json(
       {
         error:
           locale === "zh"
-            ? `產品目錄資料庫查詢失敗：${message}`
+            ? missingDocumentTable
+              ? "找不到 catalog_documents 資料表。請先在 Neon SQL Editor 執行建立文件資料表的 SQL。"
+              : `產品目錄資料庫查詢失敗：${message}`
             : `Catalog database query failed: ${message}`
       },
       { status: 500 }
     );
   }
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && documents.length === 0) {
     let officialSnippets: OfficialSnippet[] = [];
 
     try {
@@ -791,7 +879,7 @@ export async function POST(request: Request) {
         messages: [
           {
             role: "system",
-            content: buildCatalogPrompt(locale, text, rows, history)
+              content: buildCatalogPrompt(locale, text, rows, documents, history)
           },
           {
             role: "user",

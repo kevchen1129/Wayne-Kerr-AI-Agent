@@ -38,6 +38,26 @@ type NormalizedCatalogProduct = {
   raw_specs_json: Record<string, unknown>;
 };
 
+type ParsedCatalogDocument = {
+  title?: string;
+  doc_type?: string;
+  language?: string;
+  related_models?: string[];
+  summary_zh?: string;
+  summary_en?: string;
+  tags?: string[];
+};
+
+type NormalizedCatalogDocument = {
+  title: string;
+  doc_type: string;
+  language: string;
+  related_models: string[];
+  summary_zh: string | null;
+  summary_en: string | null;
+  tags: string[];
+};
+
 const BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-v4-pro";
 const TIMEOUT_MS = 180000;
@@ -108,16 +128,40 @@ const extractFirstJson = (text: string) => {
 
 const normalizeModelHint = (value: string) => value.replace(/[^A-Z0-9-]/gi, "").toUpperCase();
 
-const extractModelHintsFromPdfUrl = (pdfUrl: string) => {
+const extractModelCodes = (value: string) =>
+  Array.from(new Set(value.toUpperCase().match(/[A-Z]{0,3}\d{3,5}[A-Z]{0,3}/g) ?? []))
+    .map(normalizeModelHint)
+    .filter((candidate) => candidate.length >= 4);
+
+const getPdfFilename = (pdfUrl: string) => {
   try {
-    const pathname = new URL(pdfUrl).pathname;
-    const filename = pathname.split("/").pop() || "";
-    const basename = filename.replace(/\.pdf$/i, "");
-    const candidate = normalizeModelHint(basename);
-    return candidate.length >= 4 ? [candidate] : [];
+    return decodeURIComponent(new URL(pdfUrl).pathname.split("/").pop() || "");
   } catch {
-    return [];
+    return "";
   }
+};
+
+const getDocumentType = (pdfUrl: string) => {
+  const filename = getPdfFilename(pdfUrl).toLowerCase();
+  if (/(user\s*manual|operating\s*manual|instruction\s*manual)/.test(filename)) return "manual";
+  if (/(fixture|test\s*fixture|adapter|test\s*lead)/.test(filename)) return "fixture";
+  if (/(accessory|accessories|option)/.test(filename)) return "accessory";
+  if (/(application\s*note|app\s*note)/.test(filename)) return "application_note";
+  return "datasheet";
+};
+
+const isCatalogDocument = (pdfUrl: string) => {
+  const filename = getPdfFilename(pdfUrl).toLowerCase();
+  return (
+    new URL(pdfUrl).pathname.toLowerCase().includes("/catalog_documents/") ||
+    /(user\s*manual|operating\s*manual|instruction\s*manual|fixture|test\s*fixture|adapter|test\s*lead|accessory|application\s*note)/.test(
+      filename
+    )
+  );
+};
+
+const extractModelHintsFromPdfUrl = (pdfUrl: string) => {
+  return extractModelCodes(getPdfFilename(pdfUrl));
 };
 
 const extractModelHintsFromPdfText = (pdfText: string) => {
@@ -228,6 +272,92 @@ const buildImportPrompt = (
   ]
 }`
   ].join("\n");
+};
+
+const buildDocumentImportPrompt = (
+  locale: "zh" | "en",
+  pdfUrl: string,
+  pdfText: string,
+  modelHints: string[],
+  docType: string
+) => {
+  const filename = getPdfFilename(pdfUrl);
+  const instruction =
+    locale === "zh"
+      ? [
+          "你是 Wayne Kerr 文件匯入助理。",
+          "這是一份操作手冊、治具文件、附件文件或 datasheet；請建立一筆 catalog_documents 的中繼資料。",
+          "只輸出 JSON，不要 Markdown，不要額外說明。",
+          "不要產生 catalog_products，也不要把文件內容當成單一產品規格。",
+          "related_models 必須列出這份文件適用的 Wayne Kerr 型號或系列；只列文件明確涵蓋的型號。",
+          "summary_zh 必須是繁體中文；summary_en 必須是英文。",
+          "tags 請使用 4 至 10 個短英文技術關鍵字。",
+          `文件類型預判：${docType}`,
+          `檔名：${filename}`,
+          modelHints.length ? `可能的型號：${modelHints.join(", ")}` : "",
+          `PDF text:\n${pdfText.slice(0, 32000)}`,
+          `Schema:\n{
+  "title": "...",
+  "doc_type": "${docType}",
+  "language": "en",
+  "related_models": ["3255B"],
+  "summary_zh": "...",
+  "summary_en": "...",
+  "tags": ["setup", "calibration", "fixture"]
+}`
+        ]
+      : [
+          "You are a Wayne Kerr document import assistant.",
+          "This is a manual, fixture document, accessory document, or datasheet. Create one catalog_documents metadata record.",
+          "Output JSON only, with no Markdown or extra explanation.",
+          "Do not create catalog_products and do not treat this document as a single product specification.",
+          "related_models must list only Wayne Kerr models or series explicitly covered by this document.",
+          "summary_zh must be Traditional Chinese; summary_en must be English.",
+          "tags must contain 4 to 10 short English technical keywords.",
+          `Detected document type: ${docType}`,
+          `Filename: ${filename}`,
+          modelHints.length ? `Possible models: ${modelHints.join(", ")}` : "",
+          `PDF text:\n${pdfText.slice(0, 32000)}`,
+          `Schema:\n{
+  "title": "...",
+  "doc_type": "${docType}",
+  "language": "en",
+  "related_models": ["3255B"],
+  "summary_zh": "...",
+  "summary_en": "...",
+  "tags": ["setup", "calibration", "fixture"]
+}`
+        ];
+
+  return instruction.filter(Boolean).join("\n");
+};
+
+const normalizeCatalogDocument = (
+  value: unknown,
+  pdfUrl: string,
+  modelHints: string[],
+  detectedDocType: string
+): NormalizedCatalogDocument => {
+  const record = value && typeof value === "object" ? (value as ParsedCatalogDocument) : {};
+  const relatedModels = Array.isArray(record.related_models)
+    ? record.related_models
+        .filter((item): item is string => typeof item === "string")
+        .flatMap(extractModelCodes)
+    : [];
+
+  return {
+    title: record.title?.trim() || getPdfFilename(pdfUrl).replace(/\.pdf$/i, ""),
+    doc_type: record.doc_type?.trim() || detectedDocType,
+    language: record.language?.trim().toLowerCase() || "en",
+    related_models: Array.from(new Set([...relatedModels, ...modelHints])).slice(0, 24),
+    summary_zh: record.summary_zh?.trim() || null,
+    summary_en: record.summary_en?.trim() || null,
+    tags: Array.isArray(record.tags)
+      ? Array.from(
+          new Set(record.tags.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean))
+        ).slice(0, 12)
+      : []
+  };
 };
 
 const normalizeProducts = (value: unknown): NormalizedCatalogProduct[] => {
@@ -493,6 +623,92 @@ export async function POST(request: Request) {
         },
         { status: 400 }
       );
+    }
+
+    if (isCatalogDocument(pdfUrl)) {
+      const detectedDocType = getDocumentType(pdfUrl);
+      const aiResponse = await fetch(`${BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: process.env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: buildDocumentImportPrompt(
+                locale,
+                pdfUrl,
+                pdfText,
+                modelHints,
+                detectedDocType
+              )
+            }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0
+        }),
+        signal: controller.signal
+      });
+
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        return NextResponse.json(
+          { error: errorText || `DeepSeek request failed (${aiResponse.status}).` },
+          { status: aiResponse.status }
+        );
+      }
+
+      const aiData = await aiResponse.json();
+      const outputText = extractOutputText(aiData);
+      const parsed = outputText ? extractFirstJson(outputText) : null;
+      const documentRecord = normalizeCatalogDocument(parsed, pdfUrl, modelHints, detectedDocType);
+      const sql = neon(postgresUrl);
+
+      await sql`
+        insert into catalog_documents (
+          title,
+          doc_type,
+          language,
+          related_models,
+          source_pdf_url,
+          content_text,
+          summary_zh,
+          summary_en,
+          tags,
+          updated_at
+        ) values (
+          ${documentRecord.title},
+          ${documentRecord.doc_type},
+          ${documentRecord.language},
+          ${documentRecord.related_models},
+          ${pdfUrl},
+          ${pdfText},
+          ${documentRecord.summary_zh},
+          ${documentRecord.summary_en},
+          ${documentRecord.tags},
+          now()
+        )
+        on conflict (source_pdf_url) do update set
+          title = excluded.title,
+          doc_type = excluded.doc_type,
+          language = excluded.language,
+          related_models = excluded.related_models,
+          content_text = excluded.content_text,
+          summary_zh = excluded.summary_zh,
+          summary_en = excluded.summary_en,
+          tags = excluded.tags,
+          updated_at = now()
+      `;
+
+      return NextResponse.json({
+        text:
+          locale === "zh"
+            ? `已匯入 ${documentRecord.title} 到文件資料庫，類型為 ${documentRecord.doc_type}。它不會覆蓋任何產品規格，現在可以直接詢問 ${documentRecord.related_models.join("、") || "這份文件"} 的操作、適配治具與量測限制。`
+            : `Imported ${documentRecord.title} into the document library as ${documentRecord.doc_type}. No product specifications were overwritten; you can now ask about operating procedures, compatible fixtures, and measurement limits.`
+      });
     }
 
     const aiResponse = await fetch(`${BASE_URL}/chat/completions`, {
