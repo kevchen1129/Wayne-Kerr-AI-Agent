@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { AnalysisMode, ComposerDraft } from "@/lib/types";
 import { cx } from "@/lib/utils";
@@ -45,6 +45,38 @@ const MODE_BADGE_COLOR: Record<AnalysisMode, string> = {
   catalog_qa: "bg-emerald-600"
 };
 
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+};
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+  length: number;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error: string;
+};
+
 type ComposerProps = {
   draft: ComposerDraft;
   mode: AnalysisMode;
@@ -72,6 +104,23 @@ export function Composer({
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState("");
+
+  const speechRecognitionCtor = useMemo<SpeechRecognitionCtor | null>(() => {
+    if (typeof window === "undefined") return null;
+    return ((window as typeof window & {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    }).SpeechRecognition ||
+      (window as typeof window & { webkitSpeechRecognition?: SpeechRecognitionCtor })
+        .webkitSpeechRecognition ||
+      null);
+  }, []);
+
+  const voiceSupported = Boolean(speechRecognitionCtor);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -80,7 +129,116 @@ export function Composer({
     const maxHeight = 6 * 24;
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
-  }, [draft.text]);
+  }, [draft.text, interimTranscript]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  const formatVoiceError = (error: string) => {
+    if (locale === "zh") {
+      if (error === "not-allowed" || error === "service-not-allowed") {
+        return "請先允許麥克風權限。";
+      }
+      if (error === "no-speech") {
+        return "沒有收到語音，請再試一次。";
+      }
+      if (error === "audio-capture") {
+        return "找不到可用的麥克風。";
+      }
+      return "語音輸入目前無法使用。";
+    }
+
+    if (error === "not-allowed" || error === "service-not-allowed") {
+      return "Please allow microphone access first.";
+    }
+    if (error === "no-speech") {
+      return "No speech was detected. Please try again.";
+    }
+    if (error === "audio-capture") {
+      return "No microphone is available.";
+    }
+    return "Voice input is unavailable right now.";
+  };
+
+  const commitTranscript = (transcript: string) => {
+    const cleaned = transcript.trim();
+    if (!cleaned) return;
+    const nextText = draft.text.trim()
+      ? `${draft.text.trimEnd()}${/^[,.;:!?]/.test(cleaned) ? "" : " "}${cleaned}`
+      : cleaned;
+    onTextChange(nextText);
+  };
+
+  const handleVoiceToggle = () => {
+    if (!speechRecognitionCtor) {
+      setVoiceError(locale === "zh" ? "目前瀏覽器不支援語音輸入。" : "This browser does not support voice input.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    setVoiceError(null);
+    setInterimTranscript("");
+
+    const recognition = new speechRecognitionCtor();
+    recognition.lang = locale === "zh" ? "zh-TW" : "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      let finalTranscript = "";
+      let interim = "";
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (!transcript) continue;
+        if (result.isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        commitTranscript(finalTranscript);
+      }
+      setInterimTranscript(interim.trim());
+    };
+
+    recognition.onerror = (event) => {
+      setVoiceError(formatVoiceError(event.error));
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setInterimTranscript("");
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch (error) {
+      recognitionRef.current = null;
+      setIsListening(false);
+      setVoiceError(
+        error instanceof Error
+          ? error.message
+          : locale === "zh"
+            ? "語音輸入啟動失敗。"
+            : "Failed to start voice input."
+      );
+    }
+  };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -114,9 +272,9 @@ export function Composer({
       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
         {MODE_HINTS[mode][locale]}
       </p>
-      {validationError && (
+      {(validationError || voiceError) && (
         <div className="mb-3 rounded-2xl border border-rose-200/70 bg-rose-50/80 px-3 py-2 text-xs text-rose-600 dark:border-rose-600/40 dark:bg-rose-900/20 dark:text-rose-300">
-          {validationError}
+          {validationError ?? voiceError}
         </div>
       )}
 
@@ -175,12 +333,50 @@ export function Composer({
           </>
         )}
 
+        <button
+          type="button"
+          onClick={handleVoiceToggle}
+          disabled={!voiceSupported}
+          className={cx(
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ring))]",
+            voiceSupported
+              ? isListening
+                ? "border-emerald-400 bg-emerald-50 text-emerald-700 shadow-glow dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : "border-slate-200/80 bg-white text-slate-700 hover:-translate-y-0.5 hover:shadow-glow dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-600"
+          )}
+          aria-label={locale === "zh" ? "語音輸入" : "Voice input"}
+          title={
+            voiceSupported
+              ? isListening
+                ? locale === "zh"
+                  ? "停止語音輸入"
+                  : "Stop voice input"
+                : locale === "zh"
+                  ? "開始語音輸入"
+                  : "Start voice input"
+              : locale === "zh"
+                ? "目前瀏覽器不支援語音輸入"
+                : "This browser does not support voice input"
+          }
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3z" />
+            <path d="M19 11a7 7 0 0 1-14 0" />
+            <path d="M12 18v3" />
+            <path d="M8 21h8" />
+          </svg>
+        </button>
+
         <div className="flex-1 rounded-3xl border border-slate-300/80 bg-slate-50 px-4 py-3 shadow-sm transition focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-[rgb(var(--ring))] dark:border-slate-700 dark:bg-slate-900">
           <textarea
             ref={textareaRef}
             rows={1}
-            value={draft.text}
-            onChange={(e) => onTextChange(e.target.value)}
+            value={interimTranscript ? `${draft.text}${draft.text && interimTranscript ? " " : ""}${interimTranscript}` : draft.text}
+            onChange={(e) => {
+              setInterimTranscript("");
+              onTextChange(e.target.value);
+            }}
             placeholder={
               locale === "zh"
                 ? mode === "identify_dut"
@@ -200,6 +396,15 @@ export function Composer({
             }
             className="w-full resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />
+          {(isListening || interimTranscript) && (
+            <p className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-400">
+              {isListening
+                ? locale === "zh"
+                  ? `正在聽…${interimTranscript ? ` ${interimTranscript}` : ""}`
+                  : `Listening...${interimTranscript ? ` ${interimTranscript}` : ""}`
+                : interimTranscript}
+            </p>
+          )}
         </div>
 
         <button
